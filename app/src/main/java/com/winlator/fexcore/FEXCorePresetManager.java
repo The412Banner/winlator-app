@@ -10,7 +10,6 @@ import android.widget.SpinnerAdapter;
 import androidx.preference.PreferenceManager;
 
 import com.winlator.R;
-import com.winlator.SettingsFragment;
 import com.winlator.core.AppUtils;
 import com.winlator.core.EnvVars;
 import com.winlator.core.FileUtils;
@@ -192,11 +191,11 @@ public class FEXCorePresetManager {
                 String uriPath = preferences.getString("winlator_path_uri", null);
                 if (uriPath != null) {
                     Uri uri = Uri.parse(uriPath);
-                    String path = FileUtils.getFilePathFromUri(context, uri);
+                    String path = FileUtils.getFilePathFromUri(uri);
                     presetFile = new File(path, "Presets/fexcore_" + preset[1] + ".wbp");
                 }
                 else {
-                    presetFile = new File(SettingsFragment.DEFAULT_WINLATOR_PATH, "Presets/fexcore_" + preset[1] + ".wbp");
+                    presetFile = new File(android.os.Environment.getExternalStorageDirectory(), "Winlator/Presets/fexcore_" + preset[1] + ".wbp");
                 }
                 if (!presetFile.getParentFile().exists())
                     presetFile.getParentFile().mkdirs();
