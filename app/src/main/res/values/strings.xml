@@ -165,6 +165,7 @@
     <string name="installed_version">Installed Version</string>
     <string name="unable_to_download_file">Unable to download file</string>
     <string name="stability">Stability</string>
+    <string name="compatibility">Compatibility</string>
     <string name="conservative">Conservative</string>
     <string name="intermediate">Intermediate</string>
     <string name="performance">Performance</string>
