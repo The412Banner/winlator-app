@@ -1,123 +1,168 @@
 package com.winlator.contentdialog;
 
 import android.content.Context;
+import android.util.Log;
 import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Spinner;
+import android.widget.ToggleButton;
 
 import com.winlator.R;
-import com.winlator.container.DXWrappers;
+import com.winlator.contents.ContentProfile;
+import com.winlator.contents.ContentsManager;
 import com.winlator.core.AppUtils;
 import com.winlator.core.DefaultVersion;
 import com.winlator.core.EnvVars;
-import com.winlator.core.FileUtils;
-import com.winlator.core.GeneralComponents;
 import com.winlator.core.KeyValueSet;
 import com.winlator.core.StringUtils;
-import com.winlator.widget.GPUCardAdapter;
-import com.winlator.xenvironment.RootFS;
+import com.winlator.xenvironment.ImageFs;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public class DXVKConfigDialog extends ContentDialog {
-    public DXVKConfigDialog(String graphicsDriver, final View anchor) {
+    public static final String DEFAULT_CONFIG = "version="+DefaultVersion.DXVK+",framerate=0,maxDeviceMemory=0,async=0,asyncCache=0";
+    public static final int DXVK_TYPE_NONE = 0;
+    public static final int DXVK_TYPE_ASYNC = 1;
+    public static final int DXVK_TYPE_GPLASYNC = 2;
+    private final ToggleButton swAsync;
+    private final ToggleButton swAsyncCache;
+    private final View llAsync;
+    private final View llAsyncCache;
+    private final Context context;
+    private List<String> dxvkVersions;
+
+    public DXVKConfigDialog(View anchor) {
         super(anchor.getContext(), R.layout.dxvk_config_dialog);
-        setIcon(R.drawable.icon_display_settings);
-        Context context = anchor.getContext();
+        context = anchor.getContext();
+        setIcon(R.drawable.icon_settings);
         setTitle("DXVK "+context.getString(R.string.configuration));
 
         final Spinner sVersion = findViewById(R.id.SVersion);
         final Spinner sFramerate = findViewById(R.id.SFramerate);
         final Spinner sMaxDeviceMemory = findViewById(R.id.SMaxDeviceMemory);
-        final Spinner sCustomDevice = findViewById(R.id.SCustomDevice);
-        final Spinner sDDrawWrapper = findViewById(R.id.SDDrawWrapper);
+        swAsync = findViewById(R.id.SWAsync);
+        swAsyncCache = findViewById(R.id.SWAsyncCache);
+        llAsync = findViewById(R.id.LLAsync);
+        llAsyncCache = findViewById(R.id.LLAsyncCache);
 
-        KeyValueSet config = new KeyValueSet(anchor.getTag());
-        AppUtils.setSpinnerSelectionFromIdentifier(sFramerate, config.get("framerate", "0"));
-        AppUtils.setSpinnerSelectionFromMemorySize(sMaxDeviceMemory, config.get("maxDeviceMemory", "0"));
-        AppUtils.setSpinnerSelectionFromIdentifier(sDDrawWrapper, config.get("ddrawWrapper", DXWrappers.WINED3D));
+        ContentsManager contentsManager = new ContentsManager(context);
+        contentsManager.syncContents();
+        loadDxvkVersionSpinner(contentsManager,sVersion);
 
-        String version = config.get("version");
-        String defaultVersion = DefaultVersion.DXVK(graphicsDriver);
-        GeneralComponents.initViews(GeneralComponents.Type.DXVK, findViewById(R.id.DXVKToolbox), sVersion, version, defaultVersion);
+        KeyValueSet config = parseConfig(anchor.getTag());
+        AppUtils.setSpinnerSelectionFromIdentifier(sVersion, config.get("version"));
+        AppUtils.setSpinnerSelectionFromIdentifier(sFramerate, config.get("framerate"));
+        AppUtils.setSpinnerSelectionFromNumber(sMaxDeviceMemory, config.get("maxDeviceMemory"));
+        swAsync.setChecked(config.get("async").equals("1"));
+        swAsyncCache.setChecked(config.get("asyncCache").equals("1"));
 
-        GPUCardAdapter adapter = new GPUCardAdapter(context, android.R.layout.simple_spinner_dropdown_item, R.string.none);
-        sCustomDevice.setAdapter(adapter);
+        updateConfigVisibility(getDXVKType(sVersion.getSelectedItemPosition()));
 
-        String customDevice = config.get("customDevice");
-        if (customDevice.contains(":")) {
-            try {
-                int deviceId = Integer.parseInt(customDevice.split(":")[0], 16);
-                sCustomDevice.setSelection(adapter.getPositionByDeviceId(deviceId));
+        sVersion.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                updateConfigVisibility(getDXVKType(position));
             }
-            catch (NumberFormatException e) {}
-        }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+
+            }
+        });
 
         setOnConfirmCallback(() -> {
-            KeyValueSet newConfig = new KeyValueSet();
-            newConfig.put("version", sVersion.getSelectedItem().toString());
-            newConfig.put("framerate", StringUtils.parseNumber(sFramerate.getSelectedItem()));
-            newConfig.put("maxDeviceMemory", StringUtils.parseMemorySize(sMaxDeviceMemory.getSelectedItem()));
-
-            String ddrawWrapper = StringUtils.parseIdentifier(sDDrawWrapper.getSelectedItem());
-            if (!ddrawWrapper.equals(DXWrappers.WINED3D)) newConfig.put("ddrawWrapper", ddrawWrapper);
-
-            GPUCardAdapter.GPUCard gpuCard = (GPUCardAdapter.GPUCard)sCustomDevice.getSelectedItem();
-            if (gpuCard.deviceId > 0) {
-                newConfig.put("customDevice", String.format("%04x", gpuCard.deviceId)+":"+String.format("%04x", gpuCard.vendorId)+":"+gpuCard.name);
-            }
-
-            anchor.setTag(newConfig.toString());
+            config.put("version", sVersion.getSelectedItem().toString());
+            config.put("framerate", StringUtils.parseNumber(sFramerate.getSelectedItem()));
+            config.put("maxDeviceMemory", StringUtils.parseNumber(sMaxDeviceMemory.getSelectedItem()));
+            config.put("async", ((swAsync.isChecked())&&(llAsync.getVisibility()==View.VISIBLE))?"1":"0");
+            config.put("asyncCache", ((swAsyncCache.isChecked())&&(llAsyncCache.getVisibility()==View.VISIBLE))?"1":"0");
+            anchor.setTag(config.toString());
         });
     }
 
-    public static void setEnvVars(Context context, KeyValueSet config, EnvVars envVars) {
-        if (config.get("version").contains("async")) envVars.put("DXVK_ASYNC", "1");
-        envVars.put("DXVK_STATE_CACHE_PATH", RootFS.getDosUserCachePath());
-        envVars.put("DXVK_LOG_LEVEL", "none");
-
-        File rootDir = RootFS.find(context).getRootDir();
-        File dxvkConfigFile = new File(rootDir, RootFS.USER_CONFIG_PATH+"/dxvk.conf");
-
-        FileUtils.delete(dxvkConfigFile);
-        String content = getDXVKConfigContent(config);
-        if (FileUtils.writeString(dxvkConfigFile, content)) {
-            envVars.put("DXVK_CONFIG_FILE", RootFS.getDosUserConfigPath()+"\\dxvk.conf");
+    private void updateConfigVisibility(int dxvkType) {
+        if (dxvkType == DXVK_TYPE_ASYNC) {
+            llAsync.setVisibility(View.VISIBLE);
+            llAsyncCache.setVisibility(View.GONE);
+        } else if (dxvkType == DXVK_TYPE_GPLASYNC) {
+            llAsync.setVisibility(View.VISIBLE);
+            llAsyncCache.setVisibility(View.VISIBLE);
+        } else {
+            llAsync.setVisibility(View.GONE);
+            llAsyncCache.setVisibility(View.GONE);
         }
     }
 
-    private static String getDXVKConfigContent(KeyValueSet config) {
-        String content = "";
+    private int getDXVKType(int pos) {
+        final String v = dxvkVersions.get(pos);
+        int dxvkType = DXVK_TYPE_NONE;
+        if (v.contains("gplasync"))
+            dxvkType = DXVK_TYPE_GPLASYNC;
+        else if (v.contains("async"))
+            dxvkType = DXVK_TYPE_ASYNC;
+        return dxvkType;
+    }
 
+    public static KeyValueSet parseConfig(Object config) {
+        String data = config != null && !config.toString().isEmpty() ? config.toString() : DEFAULT_CONFIG;
+        return new KeyValueSet(data);
+    }
+
+    public static void setEnvVars(Context context, KeyValueSet config, EnvVars envVars) {
+        envVars.put("DXVK_STATE_CACHE_PATH", context.getFilesDir() + "/imagefs/" + ImageFs.CACHE_PATH);
+        envVars.put("DXVK_LOG_LEVEL", "none");
+
+        File rootDir = ImageFs.find(context).getRootDir();
+        File dxvkConfigFile = new File(rootDir, ImageFs.CONFIG_PATH+"/dxvk.conf");
+
+        String content = "\"";
         String maxDeviceMemory = config.get("maxDeviceMemory");
         if (!maxDeviceMemory.isEmpty() && !maxDeviceMemory.equals("0")) {
-            content += "dxgi.maxDeviceMemory = "+maxDeviceMemory+"\n";
-            content += "dxgi.maxSharedMemory = "+maxDeviceMemory+"\n";
+            content += "dxgi.maxDeviceMemory = "+maxDeviceMemory+';';
+            content += "dxgi.maxSharedMemory = "+maxDeviceMemory+';';
         }
 
         String framerate = config.get("framerate");
         if (!framerate.isEmpty() && !framerate.equals("0")) {
-            content += "dxgi.maxFrameRate = "+framerate+"\n";
-            content += "d3d9.maxFrameRate = "+framerate+"\n";
+//            content += "dxgi.maxFrameRate = "+framerate+';';
+//            content += "d3d9.maxFrameRate = "+framerate+';';
+            envVars.put("DXVK_FRAME_RATE", framerate);
         }
 
-        String customDevice = config.get("customDevice");
-        if (customDevice.contains(":")) {
-            String[] parts = customDevice.split(":");
-            content += "dxgi.customDeviceId = "+parts[0]+"\n";
-            content += "dxgi.customVendorId = "+parts[1]+"\n";
+        String async = config.get("async");
+        if (!async.isEmpty() && !async.equals("0"))
+//            content += "dxvk.enableAsync = True;";
+            envVars.put("DXVK_ASYNC", "1");
 
-            content += "d3d9.customDeviceId = "+parts[0]+"\n";
-            content += "d3d9.customVendorId = "+parts[1]+"\n";
+        String asyncCache = config.get("asyncCache");
+        if (!asyncCache.isEmpty() && !asyncCache.equals("0"))
+//            content += "dxvk.gplAsyncCache = True;";
+            envVars.put("DXVK_GPLASYNCCACHE", "1");
+        content = content + '\"';
 
-            content += "dxgi.customDeviceDesc = \""+parts[2]+"\"\n";
-            content += "d3d9.customDeviceDesc = \""+parts[2]+"\"\n";
+//        FileUtils.delete(dxvkConfigFile);
+//        if (!content.isEmpty() && FileUtils.writeString(dxvkConfigFile, content)) {
+//            envVars.put("DXVK_CONFIG_FILE", rootDir + ImageFs.CONFIG_PATH+"/dxvk.conf");
+//        }
+        envVars.put("DXVK_CONFIG_FILE", rootDir + ImageFs.CONFIG_PATH+"/dxvk.conf");
+        envVars.put("DXVK_CONFIG", content);
+    }
+
+    private void loadDxvkVersionSpinner(ContentsManager manager, Spinner spinner) {
+        String[] originalItems = context.getResources().getStringArray(R.array.dxvk_version_entries);
+        List<String> itemList = new ArrayList<>(Arrays.asList(originalItems));
+
+        for (ContentProfile profile : manager.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_DXVK)) {
+            String entryName = ContentsManager.getEntryName(profile);
+            int firstDashIndex = entryName.indexOf('-');
+            itemList.add(entryName.substring(firstDashIndex + 1));
         }
 
-        content += "d3d11.constantBufferRangeCheck = \"True\"\n\n";
-
-        content += "[GTA5.exe]\n";
-        content += "dxgi.maxDeviceMemory = 512\n";
-        content += "dxgi.maxSharedMemory = 512\n";
-        return content;
+        spinner.setAdapter(new ArrayAdapter<>(context, android.R.layout.simple_spinner_dropdown_item, itemList));
+        dxvkVersions = itemList;
     }
 }

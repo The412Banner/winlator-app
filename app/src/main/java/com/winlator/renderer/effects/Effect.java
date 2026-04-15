@@ -1,16 +1,28 @@
 package com.winlator.renderer.effects;
 
-import com.winlator.renderer.material.ScreenMaterial;
+import com.winlator.renderer.material.ShaderMaterial;
 
 public abstract class Effect {
-    private ScreenMaterial material;
+    // Instance field for the shader material
+    private ShaderMaterial material;
 
-    protected ScreenMaterial createMaterial() {
+    // Constructor
+    public Effect() {
+        // Initialize the material (if needed)
+    }
+
+    // Abstract method to be implemented by subclasses for creating the material
+    protected ShaderMaterial createMaterial() {
+        // Returning null indicates that the subclass is responsible for creating the material
         return null;
     }
 
-    public ScreenMaterial getMaterial() {
-        if (material == null) material = createMaterial();
+    // Returns the material associated with this effect
+    public ShaderMaterial getMaterial() {
+        // If material is not initialized, create it using the abstract method
+        if (material == null) {
+            material = createMaterial();
+        }
         return material;
     }
 }

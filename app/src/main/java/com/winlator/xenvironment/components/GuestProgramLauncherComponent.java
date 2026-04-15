@@ -62,67 +62,28 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         }
     }
 
-    public Callback<Integer> getTerminationCallback() {
-        return terminationCallback;
-    }
-
-    public void setTerminationCallback(Callback<Integer> terminationCallback) {
-        this.terminationCallback = terminationCallback;
-    }
-
-    public String getGuestExecutable() {
-        return guestExecutable;
-    }
-
-    public void setGuestExecutable(String guestExecutable) {
-        this.guestExecutable = guestExecutable;
-    }
-
-    public EnvVars getEnvVars() {
-        return envVars;
-    }
-
-    public void setEnvVars(EnvVars envVars) {
-        this.envVars = envVars;
-    }
-
-    public String getBox64Preset() {
-        return box64Preset;
-    }
-
-    public void setBox64Preset(String box64Preset) {
-        this.box64Preset = box64Preset;
-    }
-
-    public String getFexcorePreset() {
-        return fexcorePreset;
-    }
-
-    public void setFexcorePreset(String fexcorePreset) {
-        this.fexcorePreset = fexcorePreset;
-    }
-
-    public WineInfo getWineInfo() {
-        return wineInfo;
-    }
-
-    public void setWineInfo(WineInfo wineInfo) {
-        this.wineInfo = wineInfo;
-    }
+    public Callback<Integer> getTerminationCallback() { return terminationCallback; }
+    public void setTerminationCallback(Callback<Integer> terminationCallback) { this.terminationCallback = terminationCallback; }
+    public String getGuestExecutable() { return guestExecutable; }
+    public void setGuestExecutable(String guestExecutable) { this.guestExecutable = guestExecutable; }
+    public EnvVars getEnvVars() { return envVars; }
+    public void setEnvVars(EnvVars envVars) { this.envVars = envVars; }
+    public String getBox64Preset() { return box64Preset; }
+    public void setBox64Preset(String box64Preset) { this.box64Preset = box64Preset; }
+    public String getFexcorePreset() { return fexcorePreset; }
+    public void setFexcorePreset(String fexcorePreset) { this.fexcorePreset = fexcorePreset; }
+    public WineInfo getWineInfo() { return wineInfo; }
+    public void setWineInfo(WineInfo wineInfo) { this.wineInfo = wineInfo; }
 
     private int execGuestProgram() {
         Context context = environment.getContext();
         RootFS rootFS = environment.getRootFS();
         File rootDir = rootFS.getRootDir();
-
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
-        boolean enableBox64Logs = preferences.getInt("box64_logs", 0) >= 1;
 
         EnvVars envVars = new EnvVars();
         addBox64EnvVars(envVars);
         LocaleHelper.setEnvVars(envVars);
-
-        // FEX-Emu env vars (no-op if preset is default/empty)
         envVars.putAll(FEXCorePresetManager.getEnvVars(context, fexcorePreset));
 
         envVars.put("HOME", rootDir + RootFS.HOME_PATH);
@@ -135,8 +96,6 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         envVars.put("LD_LIBRARY_PATH", rootFS.getLibDir().getPath() + ":/system/lib64");
         envVars.put("BOX64_LD_LIBRARY_PATH", rootDir + "/lib/x86_64-linux-gnu");
         envVars.put("ANDROID_SYSVSHM_SERVER", rootDir + UnixSocketConfig.SYSVSHM_SERVER_PATH);
-
-        // Extended Bionic env vars for Wine compatibility
         envVars.put("XDG_DATA_DIRS", rootDir + "/usr/share");
         envVars.put("XDG_CONFIG_DIRS", rootDir + "/usr/etc/xdg");
         envVars.put("FONTCONFIG_PATH", rootDir + "/usr/etc/fonts");
@@ -148,7 +107,6 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         envVars.put("WINE_DISABLE_FULLSCREEN_HACK", "1");
         envVars.put("WINE_NO_DUPLICATE_EXPLORER", "1");
 
-        // DNS resolution via Android
         try {
             ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
             if (cm != null && cm.getActiveNetwork() != null) {
@@ -157,7 +115,6 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
             }
         } catch (Exception ignored) {}
 
-        // LD_PRELOAD sysvshm if available
         File shmLib = new File(rootFS.getLibDir(), "libandroid-sysvshm.so");
         if (shmLib.exists()) envVars.put("LD_PRELOAD", shmLib.getAbsolutePath());
 
@@ -166,12 +123,10 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
 
         if (this.envVars != null) envVars.putAll(this.envVars);
 
-        // Build launch command — Arm64EC Wine runs natively, x86_64 needs Box64
         String command;
         boolean useArm64EC = wineInfo != null && wineInfo.isArm64EC();
         if (useArm64EC) {
             command = winePath + "/" + guestExecutable;
-            // WoW64: choose FEX or Box64 wow64 helper
             String emulator = preferences.getString("arm64ec_emulator", "wowbox64");
             if ("fexcore".equalsIgnoreCase(emulator)) {
                 envVars.put("HODLL", "libwow64fex.dll");
@@ -184,9 +139,7 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         }
 
         return ProcessHelper.exec(command, envVars, rootDir, (status) -> {
-            synchronized (lock) {
-                pid = -1;
-            }
+            synchronized (lock) { pid = -1; }
             if (terminationCallback != null) terminationCallback.call(status);
         });
     }
@@ -196,7 +149,6 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
         String box64Version = preferences.getString("box64_version", DefaultVersion.BOX64);
         String currentBox64Version = preferences.getString("current_box64_version", "");
-
         if (!box64Version.equals(currentBox64Version)) {
             GeneralComponents.extractFile(GeneralComponents.Type.BOX64, context, box64Version, DefaultVersion.BOX64);
             preferences.edit().putString("current_box64_version", box64Version).apply();
@@ -207,14 +159,12 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         Context context = environment.getContext();
         RootFS rootFS = environment.getRootFS();
         if (wineInfo == null || !wineInfo.isArm64EC()) return;
-
-        String wowVersion = DefaultVersion.WOWBOX64;
         File system32dir = new File(rootFS.getRootDir(), "/usr/lib/wine/x86_64-windows");
         File wowDll = new File(system32dir, "wowbox64.dll");
         if (!wowDll.exists()) {
             system32dir.mkdirs();
             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context,
-                    "wowbox64/wowbox64-" + wowVersion + ".tzst", system32dir);
+                    "wowbox64/wowbox64-" + DefaultVersion.WOWBOX64 + ".tzst", system32dir);
         }
     }
 
@@ -222,14 +172,12 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         Context context = environment.getContext();
         RootFS rootFS = environment.getRootFS();
         if (wineInfo == null || !wineInfo.isArm64EC()) return;
-
-        String fexVersion = DefaultVersion.FEXCORE;
         File libDir = rootFS.getLibDir();
         File fexLib = new File(libDir, "libwow64fex.dll");
         if (!fexLib.exists()) {
             libDir.mkdirs();
             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context,
-                    "fexcore/fexcore-" + fexVersion + ".tzst", libDir);
+                    "fexcore/fexcore-" + DefaultVersion.FEXCORE + ".tzst", libDir);
         }
     }
 
@@ -253,12 +201,10 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         if (box64Logs >= 1) {
             envVars.put("BOX64_LOG", "1");
             envVars.put("BOX64_DYNAREC_MISSING", "1");
-
             if (box64Logs == 2) {
                 envVars.put("BOX64_SHOWSEGV", "1");
                 envVars.put("BOX64_DLSYM_ERROR", "1");
                 envVars.put("BOX64_TRACE_FILE", "stderr");
-
                 if (saveToFile) {
                     File parent = (new File(preferences.getString("log_file", LogView.getLogFile().getPath()))).getParentFile();
                     if (parent != null && parent.isDirectory()) {
@@ -272,7 +218,6 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         }
 
         envVars.putAll(Box64PresetManager.getEnvVars(context, box64Preset));
-
         File box64RCFile = new File(rootFS.getRootDir(), "/etc/config.box64rc");
         envVars.put("BOX64_RCFILE", box64RCFile.getPath());
     }
@@ -284,9 +229,8 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
                 List<ProcessHelper.PStat> processes = ProcessHelper.getChildProcesses();
                 for (int i = processes.size() - 1; i >= 0; i--) {
                     ProcessHelper.PStat process = processes.get(i);
-                    if (process.guestProcess && process.state != ProcessHelper.PState.STOPPED) {
+                    if (process.guestProcess && process.state != ProcessHelper.PState.STOPPED)
                         ProcessHelper.suspendProcess(process.pid);
-                    }
                 }
             }
         }
@@ -299,9 +243,8 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
                 List<ProcessHelper.PStat> processes = ProcessHelper.getChildProcesses();
                 for (int i = 0; i < processes.size(); i++) {
                     ProcessHelper.PStat process = processes.get(i);
-                    if (process.guestProcess && process.state == ProcessHelper.PState.STOPPED) {
+                    if (process.guestProcess && process.state == ProcessHelper.PState.STOPPED)
                         ProcessHelper.resumeProcess(process.pid);
-                    }
                 }
             }
         }

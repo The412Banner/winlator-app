@@ -3,14 +3,12 @@ package com.winlator.core;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Rect;
 import android.os.Build;
-import android.os.Environment;
 import android.os.Looper;
 import android.text.Html;
 import android.util.TypedValue;
@@ -23,7 +21,6 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.Spinner;
@@ -31,11 +28,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.preference.PreferenceManager;
 
 import com.google.android.material.tabs.TabLayout;
 import com.winlator.R;
-import com.winlator.SettingsFragment;
+import com.winlator.XrActivity;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -43,21 +39,25 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 public abstract class AppUtils {
-    public static final String DIRECTORY_DOWNLOADS = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).getPath();
-    public static final String INTERNAL_STORAGE = "/data/data/com.winlator/storage";
     private static WeakReference<Toast> globalToastReference = null;
-
-    public static class RestartApplicationOptions {
-        public int selectedMenuItemId;
-        public int containerId;
-        public String startPath;
-    }
 
     public static void keepScreenOn(Activity activity) {
         activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
-    public static void restartActivity(Activity activity) {
+    public static String getArchName() {
+        for (String arch : Build.SUPPORTED_ABIS) {
+            switch (arch) {
+                case "arm64-v8a": return "arm64";
+                case "armeabi-v7a": return "armhf";
+                case "x86_64": return "x86_64";
+                case "x86": return "x86";
+            }
+        }
+        return "armhf";
+    }
+
+    public static void restartActivity(AppCompatActivity activity) {
         Intent intent = activity.getIntent();
         activity.finish();
         activity.startActivity(intent);
@@ -65,19 +65,13 @@ public abstract class AppUtils {
     }
 
     public static void restartApplication(Context context) {
-        restartApplication(context, null);
+        restartApplication(context, 0);
     }
 
-    public static void restartApplication(Context context, RestartApplicationOptions options) {
+    public static void restartApplication(Context context, int selectedMenuItemId) {
         Intent intent = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
         Intent mainIntent = Intent.makeRestartActivityTask(intent.getComponent());
-
-        if (options != null) {
-            if (options.selectedMenuItemId > 0) mainIntent.putExtra("selected_menu_item_id", options.selectedMenuItemId);
-            if (options.containerId > 0) mainIntent.putExtra("container_id", options.containerId);
-            if (options.startPath != null) mainIntent.putExtra("start_path", options.startPath);
-        }
-
+        if (selectedMenuItemId > 0) mainIntent.putExtra("selected_menu_item_id", selectedMenuItemId);
         context.startActivity(mainIntent);
         Runtime.getRuntime().exit(0);
     }
@@ -269,7 +263,7 @@ public abstract class AppUtils {
     public static boolean setSpinnerSelectionFromIdentifier(Spinner spinner, String identifier) {
         spinner.setSelection(0, false);
         for (int i = 0; i < spinner.getCount(); i++) {
-            if (StringUtils.parseIdentifier(spinner.getItemAtPosition(i)).equalsIgnoreCase(identifier)) {
+            if (StringUtils.parseIdentifier(spinner.getItemAtPosition(i)).equals(identifier)) {
                 spinner.setSelection(i, false);
                 return true;
             }
@@ -277,21 +271,10 @@ public abstract class AppUtils {
         return false;
     }
 
-    public static boolean setSpinnerSelectionFromNumber(Spinner spinner, String value) {
+    public static boolean setSpinnerSelectionFromNumber(Spinner spinner, String number) {
         spinner.setSelection(0, false);
         for (int i = 0; i < spinner.getCount(); i++) {
-            if (StringUtils.parseNumber(spinner.getItemAtPosition(i)).equals(value)) {
-                spinner.setSelection(i, false);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public static boolean setSpinnerSelectionFromMemorySize(Spinner spinner, String value) {
-        spinner.setSelection(0, false);
-        for (int i = 0; i < spinner.getCount(); i++) {
-            if (StringUtils.parseMemorySize(spinner.getItemAtPosition(i)).equals(value)) {
+            if (StringUtils.parseNumber(spinner.getItemAtPosition(i)).equals(number)) {
                 spinner.setSelection(i, false);
                 return true;
             }
@@ -300,20 +283,21 @@ public abstract class AppUtils {
     }
 
     public static void setupTabLayout(final View view, int tabLayoutResId, final int... tabResIds) {
-        setupTabLayout(view, tabLayoutResId, null, tabResIds);
-    }
-
-    public static void setupTabLayout(final View view, int tabLayoutResId, Callback<Integer> onShowTab, final int... tabResIds) {
         final Callback<Integer> tabSelectedCallback = (position) -> {
             for (int i = 0; i < tabResIds.length; i++) {
                 View tabView = view.findViewById(tabResIds[i]);
-                int visibility = position == i ? View.VISIBLE : View.GONE;
-                tabView.setVisibility(visibility);
-                if (visibility == View.VISIBLE && onShowTab != null) onShowTab.call(tabResIds[i]);
+                tabView.setVisibility(position == i ? View.VISIBLE : View.GONE);
             }
         };
 
         TabLayout tabLayout = view.findViewById(tabLayoutResId);
+        for (int i = 0; i < tabResIds.length; i++) {
+            TabLayout.Tab tab = tabLayout.getTabAt(i);
+            if (view.getResources().getString(R.string.xr).compareTo(tab.getText().toString()) == 0) {
+                tab.view.setVisibility(XrActivity.isSupported() ? View.VISIBLE : View.GONE);
+            }
+        }
+
         tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabSelected(TabLayout.Tab tab) {
@@ -344,9 +328,16 @@ public abstract class AppUtils {
         }
     }
 
-    public static void runDelayed(final Runnable callback, long delay) {
-        if (callback == null) return;
-        (new Timer()).schedule(new TimerTask() {
+    public static void runDelayed(Runnable callback, long delay) {
+        if (callback == null) {
+            return;
+        }
+
+        // Create a Timer to schedule the task
+        Timer timer = new Timer();
+
+        // Schedule the task with the specified delay
+        timer.schedule(new TimerTask() {
             @Override
             public void run() {
                 callback.run();
@@ -354,35 +345,4 @@ public abstract class AppUtils {
         }, delay);
     }
 
-    public static TextView createDebugMsgTextView(Context context) {
-        TextView textView = new TextView(context);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-        params.gravity = Gravity.RIGHT | Gravity.BOTTOM;
-        int margin = (int)UnitUtils.dpToPx(16);
-        int padding = (int)UnitUtils.dpToPx(8);
-        params.setMargins(margin, margin, margin, margin);
-        textView.setPadding(padding, padding, padding, padding);
-        textView.setLayoutParams(params);
-        textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
-        textView.setText("DEBUG VERSION");
-        textView.setBackgroundColor(0x88ffffff);
-        return textView;
-    }
-
-    public static int getThemeColor(Context context, int attrId) {
-        TypedValue typedValue = new TypedValue();
-        context.getTheme().resolveAttribute(attrId, typedValue, true);
-        return typedValue.data;
-    }
-
-    public static void setActivityTheme(Activity activity) {
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(activity);
-        int appTheme = preferences.getInt("app_theme", SettingsFragment.APP_THEME_DARK);
-        if (appTheme == SettingsFragment.APP_THEME_LIGHT) {
-            activity.setTheme(R.style.AppThemeLight);
-        }
-        else if (appTheme == SettingsFragment.APP_THEME_DARK) {
-            activity.setTheme(R.style.AppThemeDark);
-        }
-    }
 }

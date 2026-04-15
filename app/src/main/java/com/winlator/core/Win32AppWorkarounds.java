@@ -1,151 +1,201 @@
 package com.winlator.core;
 
+import android.util.Log;
+
 import com.winlator.XServerDisplayActivity;
-import com.winlator.container.Container;
-import com.winlator.container.DXWrappers;
 import com.winlator.winhandler.WinHandler;
-import com.winlator.xserver.ScreenInfo;
 import com.winlator.xserver.Window;
+
+import androidx.collection.ArrayMap;
 
 import java.util.Locale;
 
 public class Win32AppWorkarounds {
-    private final short taskAffinityMask;
-    private final short taskAffinityMaskWoW64;
+
     private final XServerDisplayActivity activity;
-
-    private interface Workaround {}
-
-    private static class MultiWorkaround implements Workaround {
-        private final Workaround[] list;
-
-        public MultiWorkaround(Workaround... list) {
-            this.list = list;
-        }
-    }
-
-    private interface WindowWorkaround extends Workaround {
-        void apply(Window window);
-    }
-
-    private interface EnvVarsWorkaround extends Workaround {
-        void apply(EnvVars envVars);
-    }
-
-    private interface ScreenSizeWorkaround extends Workaround {
-        String getValue();
-    }
-
-    private interface DXWrapperWorkaround extends Workaround {
-        String getValue();
-    }
-
-    private interface WinComponentsWorkaround extends Workaround {
-        void setValue(KeyValueSet wincomponents);
-    }
+    private short taskAffinityMask;
+    private short taskAffinityMaskWoW64;
+    private ArrayMap<String, Workaround> workarounds;
 
     public Win32AppWorkarounds(XServerDisplayActivity activity) {
         this.activity = activity;
-        Container container = activity.getContainer();
-        taskAffinityMask = (short)ProcessHelper.getAffinityMask(container.getCPUList(true));
-        taskAffinityMaskWoW64 = (short)ProcessHelper.getAffinityMask(container.getCPUListWoW64(true));
     }
 
-    private void applyWorkaround(Workaround workaround) {
-        if (workaround instanceof EnvVarsWorkaround) {
-            ((EnvVarsWorkaround)workaround).apply(activity.getOverrideEnvVars());
-        }
-        else if (workaround instanceof ScreenSizeWorkaround) {
-            activity.setScreenInfo(new ScreenInfo(((ScreenSizeWorkaround)workaround).getValue()));
-        }
-        else if (workaround instanceof DXWrapperWorkaround) {
-            activity.setDXWrapper(((DXWrapperWorkaround)workaround).getValue());
-        }
-        else if (workaround instanceof WinComponentsWorkaround) {
-            KeyValueSet wincomponents = new KeyValueSet(Container.DEFAULT_WINCOMPONENTS);
-            ((WinComponentsWorkaround)workaround).setValue(wincomponents);
-            activity.setWinComponents(wincomponents.toString());
-        }
+    public void setTaskAffinityMask(short taskAffinityMask) {
+        this.taskAffinityMask = taskAffinityMask;
     }
+
+    public void setTaskAffinityMaskWoW64(short taskAffinityMaskWoW64) {
+        this.taskAffinityMaskWoW64 = taskAffinityMaskWoW64;
+    }
+
+    private void initWorkarounds() {
+        if (this.workarounds != null) {
+            Log.d("Win32AppWorkarounds", "Workarounds already initialized.");
+            return;
+        }
+
+        workarounds = new ArrayMap<>();
+
+        Log.d("Win32AppWorkarounds", "Initializing workarounds...");
+
+        workarounds.put("dxmd.exe", new MultiWorkaround(
+                new TaskAffinityWorkaround(taskAffinityMask),
+                new DXWrapperWorkaround("dxvk"),
+                new EnvVarsWorkaround("WINEVMEMMAXSIZE", "16384"),
+                new EnvVarsWorkaround("WINEOVERRIDEAFFINITYMASK", Short.toString(taskAffinityMask)),
+                new DelayedTaskAffinityWorkaround(taskAffinityMask)
+        ));
+
+        Log.d("Win32AppWorkarounds", "Workarounds initialized.");
+    }
+
+
 
     public void applyStartupWorkarounds(String className) {
-        Workaround workaround = getWorkaroundFor(className);
-        if (workaround == null) return;
+        Log.d("Win32AppWorkarounds", "applyStartupWorkarounds called with className: " + className);
 
-        if (workaround instanceof MultiWorkaround) {
-            for (Workaround workaround2 : ((MultiWorkaround)workaround).list) applyWorkaround(workaround2);
-        }
-        else applyWorkaround(workaround);
-    }
+        initWorkarounds();
+        Workaround workaround = workarounds.get(className.toLowerCase(Locale.ENGLISH));
 
-    private void setProcessAffinity(Window window, int processAffinity) {
-        int processId = window.getProcessId();
-        String className = window.getClassName();
-        WinHandler winHandler = activity.getWinHandler();
+        if (workaround != null) {
+            Log.d("Win32AppWorkarounds", "Found workaround for className: " + className);
 
-        if (className.equals("steam.exe")) return;
-
-        if (processId > 0) {
-            winHandler.setProcessAffinity(processId, processAffinity);
-        }
-        else if (!className.isEmpty()) {
-            winHandler.setProcessAffinity(window.getClassName(), processAffinity);
+            if (workaround instanceof MultiWorkaround) {
+                for (Workaround subWorkaround : ((MultiWorkaround) workaround).getWorkarounds()) {
+                    applyWorkaround(subWorkaround);
+                }
+            } else {
+                applyWorkaround(workaround);
+            }
+        } else {
+            Log.w("Win32AppWorkarounds", "No workaround found for className: " + className);
         }
     }
 
-    public void applyWindowWorkarounds(Window window) {
-        Workaround workaround = getWorkaroundFor(window.getClassName());
-        if (workaround instanceof WindowWorkaround) {
-            ((WindowWorkaround)workaround).apply(window);
-        }
-        else if (workaround instanceof MultiWorkaround) {
-            for (Workaround workaround2 : ((MultiWorkaround) workaround).list) {
-                if (workaround2 instanceof WindowWorkaround) {
-                    ((WindowWorkaround)workaround2).apply(window);
-                    break;
+
+    public void assignTaskAffinity(Window window) {
+        if (taskAffinityMask == 0 || !window.isApplicationWindow()) return;
+
+        initWorkarounds();
+        int affinity = window.isWoW64() ? taskAffinityMaskWoW64 : taskAffinityMask;
+
+        String className = window.getClassName().toLowerCase(Locale.ENGLISH);
+        Workaround workaround = workarounds.get(className);
+
+        if (workaround instanceof TaskAffinityWorkaround) {
+            affinity = ((TaskAffinityWorkaround) workaround).getAffinityMask(window);
+        } else if (workaround instanceof MultiWorkaround) {
+            for (Workaround subWorkaround : ((MultiWorkaround) workaround).getWorkarounds()) {
+                if (subWorkaround instanceof TaskAffinityWorkaround) {
+                    affinity = ((TaskAffinityWorkaround) subWorkaround).getAffinityMask(window);
+                } else if (subWorkaround instanceof DelayedTaskAffinityWorkaround) {
+                    ((DelayedTaskAffinityWorkaround) subWorkaround).apply(activity, window);
                 }
             }
         }
 
-        int windowGroup = window.getWMHintsValue(Window.WMHints.WINDOW_GROUP);
-        boolean canApplyProcessAffinity = window.isRenderable() && !window.getClassName().isEmpty() && windowGroup == window.id;
-        if (canApplyProcessAffinity) {
-            int processAffinity = window.isWoW64() ? taskAffinityMaskWoW64 : taskAffinityMask;
-            if (processAffinity != 0) setProcessAffinity(window, processAffinity);
+        setProcessAffinity(window, affinity);
+    }
+
+
+    private void applyWorkaround(Workaround workaround) {
+        if (workaround instanceof EnvVarsWorkaround) {
+            EnvVarsWorkaround envWorkaround = (EnvVarsWorkaround) workaround;
+            envWorkaround.apply(activity.getOverrideEnvVars());
+            Log.d("Win32AppWorkarounds", "Applied EnvVarsWorkaround: " + envWorkaround.key + " = " + envWorkaround.value);
+        } else if (workaround instanceof DXWrapperWorkaround) {
+            DXWrapperWorkaround dxWorkaround = (DXWrapperWorkaround) workaround;
+            activity.setDXWrapper(dxWorkaround.getValue());
+            Log.d("Win32AppWorkarounds", "Applied DXWrapperWorkaround with value: " + dxWorkaround.getValue());
+        } else {
+            Log.d("Win32AppWorkarounds", "Applied generic workaround: " + workaround.getClass().getSimpleName());
         }
     }
 
-    private Workaround getWorkaroundFor(String className) {
-        String appIdentifier;
-        if (className.startsWith("steam://")) {
-            appIdentifier = className.substring(className.lastIndexOf("/") + 1);
-        }
-        else appIdentifier = className.toLowerCase(Locale.ENGLISH);
 
-        switch (appIdentifier) {
-            case "sonicgenerations.exe":
-            case "71340":
-            case "valkyria.exe":
-            case "294860":
-                return (EnvVarsWorkaround) (envVars) -> envVars.put("WINEESYNC", "0");
-            case "blacklist_game.exe":
-            case "blacklist_dx11_game.exe":
-                return (EnvVarsWorkaround) (envVars) -> envVars.put("WINEOVERRIDEAFFINITYMASK", taskAffinityMaskWoW64);
-            case "fate.exe":
-                return (ScreenSizeWorkaround) () -> "1024x768";
-            case "ffxii_tza.exe":
-                ScreenInfo screenInfo = activity.getScreenInfo();
-                return (ScreenSizeWorkaround) () -> (screenInfo.width+4)+"x"+(screenInfo.height+4);
-            case "chronocross_launcher.exe":
-                return (WindowWorkaround) (window) -> window.attributes.setTransparent(true);
-            case "dino.exe":
-            case "dino2.exe":
-            case "bof4.exe":
-                return (WinComponentsWorkaround) (wincomponents) -> wincomponents.put("directshow", "1");
-            case "discipl2.exe":
-                return (DXWrapperWorkaround) () -> DXWrappers.WINED3D;
-            default:
-                return null;
+
+    private void setProcessAffinity(Window window, int processAffinity) {
+        WinHandler winHandler = activity.getWinHandler();
+        int processId = window.getProcessId();
+
+        if (processId > 0) {
+            winHandler.setProcessAffinity(processId, processAffinity);
+        } else if (!window.getClassName().isEmpty()) {
+            winHandler.setProcessAffinity(window.getClassName(), processAffinity);
+        }
+    }
+
+    // Base class for all workarounds
+    private abstract static class Workaround {}
+
+    private static class TaskAffinityWorkaround extends Workaround {
+        private final int affinityMask;
+
+        public TaskAffinityWorkaround(int affinityMask) {
+            this.affinityMask = affinityMask;
+        }
+
+        public int getAffinityMask(Window window) {
+            return affinityMask;
+        }
+    }
+
+    private static class DelayedTaskAffinityWorkaround extends Workaround {
+        private final int affinityMask;
+
+        public DelayedTaskAffinityWorkaround(int affinityMask) {
+            this.affinityMask = affinityMask;
+        }
+
+        public void apply(XServerDisplayActivity activity, Window window) {
+            AppUtils.runDelayed(() -> {
+                WinHandler winHandler = activity.getWinHandler();
+                int processId = window.getProcessId();
+
+                if (processId > 0) {
+                    winHandler.setProcessAffinity(processId, affinityMask);
+                }
+            }, 40000); // 40 seconds delay
+        }
+
+    }
+
+    private static class DXWrapperWorkaround extends Workaround {
+        private final String value;
+
+        public DXWrapperWorkaround(String value) {
+            this.value = value;
+        }
+
+        public String getValue() {
+            return value;
+        }
+    }
+
+    private static class EnvVarsWorkaround extends Workaround {
+        private final String key;
+        private final String value;
+
+        public EnvVarsWorkaround(String key, String value) {
+            this.key = key;
+            this.value = value;
+        }
+
+        public void apply(EnvVars envVars) {
+            envVars.put(key, value);
+        }
+    }
+
+    private static class MultiWorkaround extends Workaround {
+        private final Workaround[] workarounds;
+
+        public MultiWorkaround(Workaround... workarounds) {
+            this.workarounds = workarounds;
+        }
+
+        public Workaround[] getWorkarounds() {
+            return workarounds;
         }
     }
 }

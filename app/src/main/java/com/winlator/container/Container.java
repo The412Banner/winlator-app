@@ -1,14 +1,18 @@
 package com.winlator.container;
 
-import com.winlator.box64.Box64Preset;
-import com.winlator.core.AppUtils;
+import android.os.Environment;
+import android.util.Log;
+
+import com.winlator.XrActivity;
+import com.winlator.box86_64.Box86_64Preset;
+import com.winlator.core.DefaultVersion;
 import com.winlator.core.EnvVars;
 import com.winlator.core.FileUtils;
 import com.winlator.core.KeyValueSet;
 import com.winlator.core.WineInfo;
 import com.winlator.core.WineThemeManager;
-import com.winlator.widget.FrameRating;
-import com.winlator.xenvironment.RootFS;
+import com.winlator.winhandler.WinHandler;
+import com.winlator.xenvironment.ImageFs;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -17,42 +21,88 @@ import java.io.File;
 import java.util.Iterator;
 
 public class Container {
-    public static final String DEFAULT_ENV_VARS = "ZINK_DESCRIPTORS=lazy ZINK_DEBUG=compact MESA_SHADER_CACHE_DISABLE=false MESA_SHADER_CACHE_MAX_SIZE=512MB mesa_glthread=true WINEESYNC=1 TU_DEBUG=noconform";
+    public enum XrControllerMapping {
+        BUTTON_A, BUTTON_B, BUTTON_X, BUTTON_Y, BUTTON_GRIP, BUTTON_TRIGGER,
+        THUMBSTICK_UP, THUMBSTICK_DOWN, THUMBSTICK_LEFT, THUMBSTICK_RIGHT
+    }
+    public static final String DEFAULT_ENV_VARS = "ZINK_DESCRIPTORS=lazy ZINK_DEBUG=compact MESA_SHADER_CACHE_DISABLE=false MESA_SHADER_CACHE_MAX_SIZE=512MB mesa_glthread=true WINEESYNC=1 TU_DEBUG=noconform,sysmem DXVK_HUD=devinfo,fps,frametimes,gpuload,version,api MANGOHUD=0 MANGOHUD_CONFIG=engine_version,gpu_stats=0";
     public static final String DEFAULT_SCREEN_SIZE = "1280x720";
-    public static final String DEFAULT_AUDIO_DRIVER = AudioDrivers.ALSA;
-    public static final String DEFAULT_DXWRAPPER = DXWrappers.DXVK;
-    public static final String DEFAULT_WINCOMPONENTS = "direct3d=1,directsound=1,directmusic=1,directshow=0,directplay=0,xaudio=1,vcrun2005=0,vcrun2010=1,wmdecoder=1";
-    public static final String FALLBACK_WINCOMPONENTS = "direct3d=0,directsound=0,directmusic=0,directshow=0,directplay=0,xaudio=0,vcrun2005=0,vcrun2010=0,wmdecoder=0";
-    public static final String DEFAULT_DRIVES = "D:"+AppUtils.DIRECTORY_DOWNLOADS +"E:"+AppUtils.INTERNAL_STORAGE;
+    public static final String DEFAULT_GRAPHICS_DRIVER = "wrapper";
+    public static final String DEFAULT_AUDIO_DRIVER = "alsa-reflector";
+    public static final String DEFAULT_EMULATOR = "FEXCore";
+    public static final String DEFAULT_DXWRAPPER = "dxvk";
+    public static final String DEFAULT_DXWRAPPERCONFIG = "version=" + DefaultVersion.DXVK + ",framerate=0,maxDeviceMemory=0,async=0,asyncCache=0" + ",vkd3dVersion=" + DefaultVersion.VKD3D + ",vkd3dLevel=12_1";
+    public static final String DEFAULT_GRAPHICSDRIVERCONFIG = "version=" + DefaultVersion.WRAPPER + ";blacklistedExtensions=" + ";maxDeviceMemory=0" + ";adrenotoolsTurnip=1" + ";frameSync=Normal";
+    public static final String DEFAULT_DDRAWRAPPER = "wined3d";
+    public static final String DEFAULT_WINCOMPONENTS = "direct3d=1,directsound=0,directmusic=0,directshow=0,directplay=0,xaudio=0,vcrun2010=1,opengl=0";
+    public static final String FALLBACK_WINCOMPONENTS = "direct3d=1,directsound=1,directmusic=1,directshow=1,directplay=1,xaudio=1,vcrun2010=1,opengl=0";
+
+    public static final String[] MEDIACONV_ENV_VARS = {
+            "MEDIACONV_AUDIO_DUMP_FILE=/data/data/com.winlator.cmod/files/imagefs/home/xuser/audio.dmp",
+            "MEDIACONV_VIDEO_DUMP_FILE=/data/data/com.winlator.cmod/files/imagefs/home/xuser/video.dmp",
+            "MEDIACONV_VIDEO_TRANSCODED_FILE=/data/data/com.winlator.cmod/files/imagefs/home/xuser/transcoded.mkv",
+            "MEDIACONV_AUDIO_TRANSCODED_FILE=/data/data/com.winlator.cmod/files/imagefs/home/xuser/transcoded.wav",
+            "MEDIACONV_BLANK_AUDIO_FILE=/data/data/com.winlator.cmod/files/imagefs/home/xuser/blank.wav",
+            "MEDIACONV_BLANK_VIDEO_FILE=/data/data/com.winlator.cmod/files/imagefs/home/xuser/blank.mkv",
+    };
+    public static final String DEFAULT_DRIVES = "D:"+Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)+"E:/data/data/com.winlator.cmod/storage";
     public static final byte STARTUP_SELECTION_NORMAL = 0;
     public static final byte STARTUP_SELECTION_ESSENTIAL = 1;
     public static final byte STARTUP_SELECTION_AGGRESSIVE = 2;
-    public static final byte MAX_DRIVE_LETTERS = 8;
+    public static final byte MAX_DRIVE_LETTERS = 26;
     public final int id;
     private String name;
     private String screenSize = DEFAULT_SCREEN_SIZE;
     private String envVars = DEFAULT_ENV_VARS;
-    private String graphicsDriver = GraphicsDrivers.DEFAULT_VULKAN_DRIVER+","+ GraphicsDrivers.DEFAULT_OPENGL_DRIVER;
+    private String graphicsDriver = DEFAULT_GRAPHICS_DRIVER;
+    private String graphicsDriverConfig = DEFAULT_GRAPHICSDRIVERCONFIG;
     private String dxwrapper = DEFAULT_DXWRAPPER;
+    private String ddrawrapper = DEFAULT_DDRAWRAPPER;
     private String dxwrapperConfig = "";
-    private String graphicsDriverConfig = "";
-    private String audioDriverConfig = "";
     private String wincomponents = DEFAULT_WINCOMPONENTS;
     private String audioDriver = DEFAULT_AUDIO_DRIVER;
     private String drives = DEFAULT_DRIVES;
-    private String wineVersion = WineInfo.MAIN_WINE_INFO.identifier();
-    private byte hudMode = (byte)FrameRating.Mode.DISABLED.ordinal();
+    private String wineVersion = WineInfo.MAIN_WINE_VERSION.identifier();
+    private boolean showFPS;
+    private boolean fullscreenStretched;
+    private boolean wow64Mode = true;
     private byte startupSelection = STARTUP_SELECTION_ESSENTIAL;
     private String cpuList;
     private String cpuListWoW64;
     private String desktopTheme = WineThemeManager.DEFAULT_DESKTOP_THEME;
-    private String box64Preset = Box64Preset.DEFAULT;
+    private String box64Preset = Box86_64Preset.COMPATIBILITY;
     private File rootDir;
     private JSONObject extraData;
+    private int rcfileId = 0;
+    private String midiSoundFont = "";
+    private int inputType = WinHandler.DEFAULT_INPUT_TYPE;
+    private String lc_all = "";
+    private int primaryController = 1;
+    private String controllerMapping = new String(new char[XrControllerMapping.values().length]);
+    private String fexcoreVersion = DefaultVersion.FEXCORE;
+    private String box64Version = DefaultVersion.BOX64;
+    private String emulator;
+    private boolean isRelativeMouseMovement;
+
+    private boolean gstreamerWorkaround = false;
+
+    private ContainerManager containerManager;
+
+
 
     public Container(int id) {
         this.id = id;
         this.name = "Container-"+id;
+    }
+
+    public Container(int id, ContainerManager containerManager) {
+        this.id = id;
+        this.name = "Container-"+id;
+        this.containerManager = containerManager;
+    }
+
+    public ContainerManager getManager() {
+        return containerManager;
     }
 
     public String getName() {
@@ -87,6 +137,10 @@ public class Container {
         this.graphicsDriver = graphicsDriver;
     }
 
+    public String getGraphicsDriverConfig() { return this.graphicsDriverConfig; }
+
+    public void setGraphicsDriverConfig(String graphicsDriverConfig) { this.graphicsDriverConfig = graphicsDriverConfig; }
+
     public String getDXWrapper() {
         return dxwrapper;
     }
@@ -95,13 +149,9 @@ public class Container {
         this.dxwrapper = dxwrapper;
     }
 
-    public String getGraphicsDriverConfig() {
-        return graphicsDriverConfig;
-    }
+    public String getDDrawWrapper() { return ddrawrapper; }
 
-    public void setGraphicsDriverConfig(String graphicsDriverConfig) {
-        this.graphicsDriverConfig = graphicsDriverConfig != null ? graphicsDriverConfig : "";
-    }
+    public void setDDrawWrapper(String ddrawrapper) { this.ddrawrapper = ddrawrapper; }
 
     public String getDXWrapperConfig() {
         return dxwrapperConfig;
@@ -109,14 +159,6 @@ public class Container {
 
     public void setDXWrapperConfig(String dxwrapperConfig) {
         this.dxwrapperConfig = dxwrapperConfig != null ? dxwrapperConfig : "";
-    }
-
-    public String getAudioDriverConfig() {
-        return audioDriverConfig;
-    }
-
-    public void setAudioDriverConfig(String audioDriverConfig) {
-        this.audioDriverConfig = audioDriverConfig != null ? audioDriverConfig : "";
     }
 
     public String getAudioDriver() {
@@ -143,12 +185,56 @@ public class Container {
         this.drives = drives;
     }
 
-    public byte getHUDMode() {
-        return hudMode;
+    public String getLC_ALL() {
+        return lc_all;
     }
 
-    public void setHUDMode(byte hudMode) {
-        this.hudMode = hudMode;
+    public void setLC_ALL(String lc_all) {
+        this.lc_all = lc_all;
+    }
+
+    public int getPrimaryController() {
+        return primaryController;
+    }
+
+    public void setPrimaryController(int primaryController) {
+        this.primaryController = primaryController;
+    }
+
+    public byte getControllerMapping(XrControllerMapping input) {
+        return (byte) controllerMapping.charAt(input.ordinal());
+    }
+
+    public void setControllerMapping(String controllerMapping) {
+        this.controllerMapping = controllerMapping;
+    }
+
+    public boolean isRelativeMouseMovement() {
+        return this.isRelativeMouseMovement;
+    }
+
+    public void setRelativeMouseMovement(boolean isRelativeMouseMovement) {
+        this.isRelativeMouseMovement = isRelativeMouseMovement;
+    }
+
+    public boolean isFullscreenStretched() { return fullscreenStretched; }
+
+    public boolean isShowFPS() {
+        return showFPS;
+    }
+
+    public void setFullscreenStretched(boolean fullscreenStretched) { this.fullscreenStretched = fullscreenStretched; }
+
+    public void setShowFPS(boolean showFPS) {
+        this.showFPS = showFPS;
+    }
+
+    public boolean isWoW64Mode() {
+        return wow64Mode;
+    }
+
+    public void setWoW64Mode(boolean wow64Mode) {
+        this.wow64Mode = wow64Mode;
     }
 
     public byte getStartupSelection() {
@@ -191,12 +277,36 @@ public class Container {
         this.box64Preset = box64Preset;
     }
 
+    public String getFEXCoreVersion() { return this.fexcoreVersion; }
+
+    public void setFEXCoreVersion(String version) { this.fexcoreVersion = version; }
+
+    public String getBox64Version() { return box64Version; }
+
+    public void setBox64Version(String version) { this.box64Version = version; }
+
+    public void setEmulator(String emulator) {
+        this.emulator = emulator;
+    }
+
+    public String getEmulator() {
+        return this.emulator;
+    }
+
     public File getRootDir() {
         return rootDir;
     }
 
     public void setRootDir(File rootDir) {
         this.rootDir = rootDir;
+    }
+
+    public boolean isGstreamerWorkaround() { // Add this getter
+        return this.gstreamerWorkaround;
+    }
+
+    public void setGstreamerWorkaround(boolean gstreamerWorkaround) { // Add this setter
+        this.gstreamerWorkaround = gstreamerWorkaround;
     }
 
     public void setExtraData(JSONObject extraData) {
@@ -239,8 +349,12 @@ public class Container {
         return new File(rootDir, ".container");
     }
 
-    public File getUserDir() {
-        return new File(rootDir, ".wine/drive_c/users/"+ RootFS.USER+"/");
+    public File getDesktopDir() {
+        return new File(rootDir, ".wine/drive_c/users/"+ImageFs.USER+"/Desktop/");
+    }
+
+    public File getDesktopDirXuser() {
+        return new File(rootDir, ".wine/drive_c/users/xuser/Desktop/");
     }
 
     public File getStartMenuDir() {
@@ -259,25 +373,50 @@ public class Container {
         this.desktopTheme = desktopTheme;
     }
 
-    public Iterable<Drive> drivesIterator() {
+    public int getRCFileId() {
+        return rcfileId;
+    }
+
+    public void setRcfileId(int id) {
+        rcfileId = id;
+    }
+
+    public String getMIDISoundFont() {
+        return midiSoundFont;
+    }
+
+    public void setMidiSoundFont(String fileName) {
+        midiSoundFont = fileName;
+    }
+
+    public int getInputType() {
+        return inputType;
+    }
+
+    public void setInputType(int inputType) {
+        this.inputType = inputType;
+    }
+
+    public Iterable<String[]> drivesIterator() {
         return drivesIterator(drives);
     }
 
-    public static Iterable<Drive> drivesIterator(final String drives) {
+    public static Iterable<String[]> drivesIterator(final String drives) {
         final int[] index = {drives.indexOf(":")};
-        return () -> new Iterator<Drive>() {
+        final String[] item = new String[2];
+        return () -> new Iterator<String[]>() {
             @Override
             public boolean hasNext() {
                 return index[0] != -1;
             }
 
             @Override
-            public Drive next() {
-                String letter = String.valueOf(drives.charAt(index[0]-1));
+            public String[] next() {
+                item[0] = String.valueOf(drives.charAt(index[0]-1));
                 int nextIndex = drives.indexOf(":", index[0]+1);
-                String path = drives.substring(index[0]+1, nextIndex != -1 ? nextIndex-1 : drives.length());
+                item[1] = drives.substring(index[0]+1, nextIndex != -1 ? nextIndex-1 : drives.length());
                 index[0] = nextIndex;
-                return new Drive(letter, path);
+                return item;
             }
         };
     }
@@ -292,31 +431,41 @@ public class Container {
             data.put("cpuList", cpuList);
             data.put("cpuListWoW64", cpuListWoW64);
             data.put("graphicsDriver", graphicsDriver);
+            data.put("graphicsDriverConfig", graphicsDriverConfig);
+            data.put("emulator", emulator);
             data.put("dxwrapper", dxwrapper);
+            data.put("ddrawrapper", ddrawrapper);
             if (!dxwrapperConfig.isEmpty()) data.put("dxwrapperConfig", dxwrapperConfig);
-            if (!graphicsDriverConfig.isEmpty()) data.put("graphicsDriverConfig", graphicsDriverConfig);
-            if (!audioDriverConfig.isEmpty()) data.put("audioDriverConfig", audioDriverConfig);
             data.put("audioDriver", audioDriver);
             data.put("wincomponents", wincomponents);
             data.put("drives", drives);
-            data.put("hudMode", hudMode);
+            data.put("showFPS", showFPS);
+            data.put("relativeMouseMovement", isRelativeMouseMovement);
+            data.put("fullscreenStretched", fullscreenStretched);
+            data.put("inputType", inputType);
+            data.put("wow64Mode", wow64Mode);
             data.put("startupSelection", startupSelection);
+            data.put("box64Version", box64Version);
             data.put("box64Preset", box64Preset);
+            data.put("fexcoreVersion", fexcoreVersion);
             data.put("desktopTheme", desktopTheme);
             data.put("extraData", extraData);
-
+            data.put("rcfileId", rcfileId);
+            data.put("midiSoundFont", midiSoundFont);
+            data.put("lc_all", lc_all);
+            data.put("primaryController", primaryController);
+            data.put("controllerMapping", controllerMapping);
+            data.put("gstreamerWorkaround", gstreamerWorkaround);
             if (!WineInfo.isMainWineVersion(wineVersion)) data.put("wineVersion", wineVersion);
             FileUtils.writeString(getConfigFile(), data.toString());
         }
         catch (JSONException e) {}
     }
 
-    public void loadData(JSONObject data) throws JSONException {
-        wineVersion = WineInfo.MAIN_WINE_INFO.identifier();
-        dxwrapperConfig = "";
-        graphicsDriverConfig = "";
-        audioDriverConfig = "";
 
+    public void loadData(JSONObject data) throws JSONException {
+        wineVersion = WineInfo.MAIN_WINE_VERSION.identifier();
+        dxwrapperConfig = "";
         checkObsoleteOrMissingProperties(data);
 
         for (Iterator<String> it = data.keys(); it.hasNext(); ) {
@@ -340,29 +489,40 @@ public class Container {
                 case "graphicsDriver" :
                     setGraphicsDriver(data.getString(key));
                     break;
+                case "graphicsDriverConfig" :
+                    setGraphicsDriverConfig(data.getString(key));
+                    break;
+                case "emulator":
+                    setEmulator(data.getString(key));
+                    break;
                 case "wincomponents" :
                     setWinComponents(data.getString(key));
                     break;
                 case "dxwrapper" :
                     setDXWrapper(data.getString(key));
                     break;
+                case "ddrawrapper":
+                    setDDrawWrapper(data.getString(key));
                 case "dxwrapperConfig" :
                     setDXWrapperConfig(data.getString(key));
-                    break;
-                case "graphicsDriverConfig" :
-                    setGraphicsDriverConfig(data.getString(key));
-                    break;
-                case "audioDriverConfig" :
-                    setAudioDriverConfig(data.getString(key));
                     break;
                 case "drives" :
                     setDrives(data.getString(key));
                     break;
                 case "showFPS" :
-                    setHUDMode((byte)(data.getBoolean(key) ? FrameRating.Mode.SIMPLE.ordinal() : FrameRating.Mode.DISABLED.ordinal()));
+                    setShowFPS(data.getBoolean(key));
                     break;
-                case "hudMode" :
-                    setHUDMode((byte)data.getInt(key));
+                case "relativeMouseMovement":
+                    setRelativeMouseMovement(data.getBoolean(key));
+                    break;
+                case "fullscreenStretched" :
+                    setFullscreenStretched(data.getBoolean(key));
+                    break;
+                case "inputType" :
+                    setInputType(data.getInt(key));
+                    break;
+                case "wow64Mode" :
+                    setWoW64Mode(data.getBoolean(key));
                     break;
                 case "startupSelection" :
                     setStartupSelection((byte)data.getInt(key));
@@ -376,8 +536,14 @@ public class Container {
                 case "wineVersion" :
                     setWineVersion(data.getString(key));
                     break;
+                case "box64Version":
+                    setBox64Version(data.getString(key));
+                    break;
                 case "box64Preset" :
                     setBox64Preset(data.getString(key));
+                    break;
+                case "fexcoreVersion":
+                    setFEXCoreVersion(data.getString(key));
                     break;
                 case "audioDriver" :
                     setAudioDriver(data.getString(key));
@@ -385,17 +551,59 @@ public class Container {
                 case "desktopTheme" :
                     setDesktopTheme(data.getString(key));
                     break;
+                case "rcfileId" :
+                    setRcfileId(data.getInt(key));
+                    break;
+                case "midiSoundFont" :
+                    setMidiSoundFont(data.getString(key));
+                    break;
+                case "lc_all" :
+                    setLC_ALL(data.getString(key));
+                    break;
+                case "primaryController" :
+                    setPrimaryController(data.getInt(key));
+                    break;
+                case "controllerMapping" :
+                    controllerMapping = data.getString(key);
+                    break;
+                case "gstreamerWorkaround" : // Add this case
+                    setGstreamerWorkaround(data.getBoolean(key));
+                    break;
             }
         }
     }
 
     public static void checkObsoleteOrMissingProperties(JSONObject data) {
         try {
-            if (data.has("extraData")) {
+            if (data.has("dxcomponents")) {
+                data.put("wincomponents", data.getString("dxcomponents"));
+                data.remove("dxcomponents");
+            }
+
+            if (data.has("dxwrapper")) {
+                String dxwrapper = data.getString("dxwrapper");
+                if (dxwrapper.equals("original-wined3d")) {
+                    data.put("dxwrapper", DEFAULT_DXWRAPPER);
+                }
+                else if (dxwrapper.startsWith("d8vk-") || dxwrapper.startsWith("dxvk-")) {
+                    data.put("dxwrapper", dxwrapper);
+                }
+            }
+
+            if (data.has("graphicsDriver")) {
+                String graphicsDriver = data.getString("graphicsDriver");
+                if (graphicsDriver.equals("turnip-zink") || graphicsDriver.equals("turnip")) {
+                    data.put("graphicsDriver", "wrapper");
+                }
+                else if (graphicsDriver.equals("llvmpipe")) {
+                    data.put("graphicsDriver", "wrapper");
+                }
+            }
+
+            if (data.has("envVars") && data.has("extraData")) {
                 JSONObject extraData = data.getJSONObject("extraData");
                 int appVersion = Integer.parseInt(extraData.optString("appVersion", "0"));
-
-                if (appVersion < 16 && data.has("envVars")) {
+                if (appVersion < 16) {
                     EnvVars defaultEnvVars = new EnvVars(DEFAULT_ENV_VARS);
                     EnvVars envVars = new EnvVars(data.getString("envVars"));
                     for (String name : defaultEnvVars) if (!envVars.has(name)) envVars.put(name, defaultEnvVars.get(name));
@@ -433,9 +641,23 @@ public class Container {
     }
 
     public static String getFallbackCPUListWoW64() {
-        String cpuList = "";
-        int numProcessors = Runtime.getRuntime().availableProcessors();
-        for (int i = numProcessors / 2; i < numProcessors; i++) cpuList += (!cpuList.isEmpty() ? "," : "")+i;
-        return cpuList;
+//        String cpuList = "";
+//        int numProcessors = Runtime.getRuntime().availableProcessors();
+//        for (int i = numProcessors / 2; i < numProcessors; i++) cpuList += (!cpuList.isEmpty() ? "," : "")+i;
+//        return cpuList;
+        return getFallbackCPUList();
     }
+
+    // Check if a specific environment variable exists
+    public boolean hasEnvVar(String keyValue) {
+        if (envVars == null || envVars.isEmpty()) return false;
+        String[] vars = envVars.split(",");
+        for (String var : vars) {
+            if (var.trim().equalsIgnoreCase(keyValue.trim())) {
+                return true; // Found the variable
+            }
+        }
+        return false;
+    }
+
 }

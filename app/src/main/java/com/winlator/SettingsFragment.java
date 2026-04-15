@@ -1,77 +1,114 @@
 package com.winlator;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.media.midi.MidiDeviceInfo;
-import android.media.midi.MidiManager;
+import android.content.res.TypedArray;
+import android.graphics.Color;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
+import android.os.Environment;
+import android.util.Log;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
 import android.widget.RadioGroup;
+import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.collection.ArrayMap;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.navigation.NavigationView;
-import com.winlator.box64.Box64EditPresetDialog;
-import com.winlator.box64.Box64Preset;
-import com.winlator.box64.Box64PresetManager;
+import com.winlator.R;
+import com.winlator.box86_64.Box86_64EditPresetDialog;
+import com.winlator.box86_64.Box86_64Preset;
+import com.winlator.box86_64.Box86_64PresetManager;
 import com.winlator.container.Container;
 import com.winlator.container.ContainerManager;
 import com.winlator.contentdialog.ContentDialog;
-import com.winlator.contentdialog.GamepadPlayerConfigDialog;
-import com.winlator.contentdialog.SoundFontTestDialog;
+import com.winlator.contents.ContentProfile;
+import com.winlator.contents.ContentsManager;
 import com.winlator.core.AppUtils;
 import com.winlator.core.ArrayUtils;
 import com.winlator.core.Callback;
 import com.winlator.core.DefaultVersion;
 import com.winlator.core.FileUtils;
-import com.winlator.core.GeneralComponents;
-import com.winlator.core.LocaleHelper;
 import com.winlator.core.PreloaderDialog;
 import com.winlator.core.StringUtils;
+import com.winlator.core.TarCompressorUtils;
 import com.winlator.core.WineInfo;
-import com.winlator.core.WineInstaller;
-import com.winlator.widget.ColorPickerView;
-import com.winlator.widget.LogView;
-import com.winlator.widget.SeekBar;
-import com.winlator.winhandler.GamepadHandler;
-import com.winlator.xenvironment.RootFS;
-import com.winlator.xenvironment.RootFSInstaller;
+import com.winlator.core.WineUtils;
+import com.winlator.inputcontrols.ControlElement;
+import com.winlator.inputcontrols.ExternalController;
+import com.winlator.inputcontrols.PreferenceKeys;
+import com.winlator.midi.MidiManager;
+import com.winlator.restore.RestoreActivity;
+import com.winlator.widget.InputControlsView;
+import com.winlator.xenvironment.ImageFs;
+import com.winlator.xenvironment.ImageFsInstaller;
 
 import org.json.JSONArray;
 import org.json.JSONException;
+import org.tukaani.xz.check.Check;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class SettingsFragment extends Fragment {
     public static final String DEFAULT_WINE_DEBUG_CHANNELS = "warn,err,fixme";
-    public static final byte APP_THEME_LIGHT = 0;
-    public static final byte APP_THEME_DARK = 1;
-    private Callback<Uri> selectWineFileCallback;
+    private Callback<Uri> installSoundFontCallback;
     private PreloaderDialog preloaderDialog;
+    public static final String DEFAULT_EXPORT_PATH = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/Winlator/Frontend";
     private SharedPreferences preferences;
-    private boolean midiDeviceCallbackRegistered = false;
+
+	// Disable or enable True Mouse Control
+//	private CheckBox cbCursorLock;
+//    // Disable or enable Xinput Processing
+    private CheckBox cbXinputToggle;
+    // Disable or enable Touchscreen Input Mode
+    private CheckBox cbXTouchscreenToggle;
+
+    private CheckBox cbGyroEnabled;
+
+    private boolean isRestoreAction = false;
+
+    private boolean enableLegacyInputMode = false;
+
+    private CheckBox cbEnableBigPictureMode;
+    private CheckBox cbEnableCustomApiKey;
+    private EditText etCustomApiKey;
+
+    private CheckBox cbDarkMode;
+    boolean isDarkMode;
+
+    private static final int REQUEST_CODE_FRONTEND_EXPORT_PATH = 1002;
+    private static final int REQUEST_CODE_INSTALL_SOUNDFONT = 1001;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -83,21 +120,17 @@ public class SettingsFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+
+        // Apply dynamic styles to all labels
+        applyDynamicStylesRecursively(view);
+
+//        Button btnConfigureGyro = view.findViewById(R.id.BTConfigureGyro);
+//        btnConfigureGyro.setOnClickListener(v -> showGyroConfigDialog());
+
         ((AppCompatActivity)getActivity()).getSupportActionBar().setTitle(R.string.settings);
     }
 
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        if (requestCode == MainActivity.OPEN_FILE_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
-            try {
-                if (selectWineFileCallback != null && data != null) selectWineFileCallback.call(data.getData());
-            }
-            catch (Exception e) {
-                AppUtils.showToast(getContext(), R.string.unable_to_import_profile);
-            }
-            selectWineFileCallback = null;
-        }
-    }
+
 
     @Nullable
     @Override
@@ -106,37 +139,190 @@ public class SettingsFragment extends Fragment {
         final Context context = getContext();
         preferences = PreferenceManager.getDefaultSharedPreferences(context);
 
-        final Spinner sSoundFont = view.findViewById(R.id.SSoundFont);
-        String soundfont = preferences.getString("soundfont", null);
-        GeneralComponents.initViews(GeneralComponents.Type.SOUNDFONT, view.findViewById(R.id.SoundFontToolbox), sSoundFont, soundfont, DefaultVersion.SOUNDFONT);
-        view.findViewById(R.id.BTSoundFontTest).setOnClickListener((v) -> (new SoundFontTestDialog(context, sSoundFont.getSelectedItem().toString())).show());
+        // Check for Dark Mode preference
+        isDarkMode = preferences.getBoolean("dark_mode", false);
+        // Apply dynamic styles
+        applyDynamicStyles(view, isDarkMode);
 
-        final Spinner sMIDIInputDevice = view.findViewById(R.id.SMIDIInputDevice);
-        String midiInputDevice = preferences.getString("midi_input_device", "auto");
-        loadMIDIInputDeviceSpinner(sMIDIInputDevice, midiInputDevice);
+        // Initialize the Dark Mode checkbox
+        cbDarkMode = view.findViewById(R.id.CBDarkMode);
+        cbDarkMode.setChecked(preferences.getBoolean("dark_mode", false));
 
-        final Spinner sBox64Version = view.findViewById(R.id.SBox64Version);
-        String box64Version = preferences.getString("box64_version", null);
-        GeneralComponents.initViews(GeneralComponents.Type.BOX64, view.findViewById(R.id.Box64Toolbox), sBox64Version, box64Version, DefaultVersion.BOX64);
+        cbDarkMode.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            // Save dark mode preference
+            SharedPreferences.Editor editor = preferences.edit();
+            editor.putBoolean("dark_mode", isChecked);
+            editor.apply();
+
+            // Update the UI or activity theme if necessary
+            updateTheme(isChecked);
+        });
+
+        // Initialize Big Picture Mode Checkbox
+        cbEnableBigPictureMode = view.findViewById(R.id.CBEnableBigPictureMode);
+        cbEnableBigPictureMode.setChecked(preferences.getBoolean("enable_big_picture_mode", false));
+
+        initCustomApiKeySettings(view);
+
+        // Initialize the cursor lock checkbox
+//        cbCursorLock = view.findViewById(R.id.CBCursorLock);
+//        cbCursorLock.setChecked(preferences.getBoolean("cursor_lock", false));
+
+        // Initialize the xinput toggle checkbox
+        cbXinputToggle = view.findViewById(R.id.CBXinputToggle);
+        cbXinputToggle.setChecked(preferences.getBoolean("xinput_toggle", false));
+
+        // Initialize the Touchscreen mode toggle
+        cbXTouchscreenToggle = view.findViewById(R.id.CBXTouchscreenToggle);
+        cbXTouchscreenToggle.setChecked(preferences.getBoolean("touchscreen_toggle", false));
+
+
+        // Initialize gyro enable checkbox
+//        cbGyroEnabled = view.findViewById(R.id.CBGyroEnabled);
+//        cbGyroEnabled.setChecked(preferences.getBoolean("gyro_enabled", false));
+
+        // CheckBox cbProcessGyroWithLeftTrigger = view.findViewById(R.id.CBProcessGyroWithLeftTrigger); // Old Method
+        // cbProcessGyroWithLeftTrigger.setChecked(preferences.getBoolean("process_gyro_with_left_trigger", false)); // Old Method
+
+//        Spinner sbGyroTriggerButton = view.findViewById(R.id.SBGyroTriggerButton);
+//        RadioGroup rgGyroMode = view.findViewById(R.id.RGyroMode);
+
+
+//        int selectedMode = preferences.getInt("gyro_mode", 0); // 0 for hold, 1 for toggle
+//
+//        TypedArray keycodeArray = getResources().obtainTypedArray(R.array.button_keycodes);
+//        int[] keycodes = new int[keycodeArray.length()];
+//
+//        // Log the keycodes for debugging purposes
+//        // Log.d("SettingsFragment", "Populating keycodes array:");
+//
+//        for (int i = 0; i < keycodeArray.length(); i++) {
+//            keycodes[i] = keycodeArray.getResourceId(i, -1); // Get the resource ID
+//            if (keycodes[i] != -1) {
+//                keycodes[i] = getResources().getInteger(keycodes[i]); // Fetch the actual integer value
+//                // Log.d("SettingsFragment", "Keycode[" + i + "] = " + keycodes[i]); // Log the populated keycode
+//            } else {
+//                // Log.e("SettingsFragment", "Invalid keycode resource at index " + i);
+//            }
+//        }
+//        keycodeArray.recycle(); // Always recycle TypedArray to free up resources
+//
+//        // Now get the currently selected button from SharedPreferences
+//        int selectedButton = preferences.getInt("gyro_trigger_button", KeyEvent.KEYCODE_BUTTON_L1);
+//        Log.d("SettingsFragment", "Selected button keycode: " + selectedButton);
+//
+//        // Find the index of the selectedButton in the keycodes array
+//        int selectedIndex = -1;
+//        for (int i = 0; i < keycodes.length; i++) {
+//            if (keycodes[i] == selectedButton) {
+//                selectedIndex = i;
+//                break;
+//            }
+//        }
+//
+//        // Ensure a valid index is found, otherwise, handle fallback
+//        if (selectedIndex != -1) {
+//            Log.d("SettingsFragment", "Selected button found at index: " + selectedIndex);
+//            sbGyroTriggerButton.setSelection(selectedIndex);
+//        } else {
+//            Log.e("SettingsFragment", "Selected button not found in keycodes array!");
+//            // If needed, handle the case where the button is not found (you can choose to throw an exception or show an error)
+//        }
+//
+//
+//        rgGyroMode.check(selectedMode == 0 ? R.id.RBHoldMode : R.id.RBToggleMode);
+
+        // Initialize the "Configure Analog Sticks" button
+        Button btConfigureAnalogSticks = view.findViewById(R.id.BTConfigureAnalogSticks);
+        btConfigureAnalogSticks.setOnClickListener(v -> showAnalogStickConfigDialog());
+
+
+        // Configure Frontend Export Path button
+
+        Button btnChooseFrontendExportPath = view.findViewById(R.id.BTChooseFrontendExportPath);
+        TextView tvFrontendExportPath = view.findViewById(R.id.TVFrontendExportPath);
+
+        // Get the saved export path from SharedPreferences or use the default
+        String savedUriString = preferences.getString("frontend_export_uri", null);
+        if (savedUriString == null) {
+            // No saved path, set default path
+            tvFrontendExportPath.setText(DEFAULT_EXPORT_PATH);
+        } else {
+            // Parse and display the saved URI path
+            Uri savedUri = Uri.parse(savedUriString);
+            String displayPath = FileUtils.getFilePathFromUri(getContext(), savedUri);
+            tvFrontendExportPath.setText(displayPath != null ? displayPath : savedUriString);
+        }
+
+        // Set the click listener for the "Choose Frontend Export Path" button
+        btnChooseFrontendExportPath.setOnClickListener(v -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE); // Launch File Picker for directory selection
+            startActivityForResult(intent, REQUEST_CODE_FRONTEND_EXPORT_PATH);
+        });
 
         final Spinner sBox64Preset = view.findViewById(R.id.SBox64Preset);
-        loadBox64PresetSpinner(view, sBox64Preset);
+        loadBox86_64PresetSpinners(view, sBox64Preset);
 
-        final RadioGroup rgAppTheme = view.findViewById(R.id.RGAppTheme);
-        final int oldAppThemeId = preferences.getInt("app_theme", APP_THEME_DARK) == APP_THEME_DARK ? R.id.RBDark : R.id.RBLight;
-        rgAppTheme.check(oldAppThemeId);
+        final Spinner sMIDISoundFont = view.findViewById(R.id.SMIDISoundFont);
 
-        final CheckBox cbMoveCursorToTouchpoint = view.findViewById(R.id.CBMoveCursorToTouchpoint);
-        cbMoveCursorToTouchpoint.setChecked(preferences.getBoolean("move_cursor_to_touchpoint", false));
+        sMIDISoundFont.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);
 
-        final CheckBox cbCapturePointerOnExternalMouse = view.findViewById(R.id.CBCapturePointerOnExternalMouse);
-        cbCapturePointerOnExternalMouse.setChecked(preferences.getBoolean("capture_pointer_on_external_mouse", true));
+        final View btInstallSF = view.findViewById(R.id.BTInstallSF);
+        final View btRemoveSF = view.findViewById(R.id.BTRemoveSF);
 
-        final CheckBox cbOpenAndroidBrowserFromWine = view.findViewById(R.id.CBOpenAndroidBrowserFromWine);
-        cbOpenAndroidBrowserFromWine.setChecked(preferences.getBoolean("open_android_browser_from_wine", true));
+        MidiManager.loadSFSpinnerWithoutDisabled(sMIDISoundFont);
+        btInstallSF.setOnClickListener(v -> {
+            installSoundFontCallback = uri -> {
+                PreloaderDialog dialog = new PreloaderDialog(requireActivity());
+                dialog.showOnUiThread(R.string.installing_content);
+                MidiManager.installSF2File(context, uri, new MidiManager.OnSoundFontInstalledCallback() {
+                    @Override
+                    public void onSuccess() {
+                        dialog.closeOnUiThread();
+                        requireActivity().runOnUiThread(() -> {
+                            ContentDialog.alert(context, R.string.sound_font_installed_success, null);
+                            MidiManager.loadSFSpinnerWithoutDisabled(sMIDISoundFont);
+                        });
+                    }
 
-        final CheckBox cbUseAndroidClipboardOnWine = view.findViewById(R.id.CBUseAndroidClipboardOnWine);
-        cbUseAndroidClipboardOnWine.setChecked(preferences.getBoolean("use_android_clipboard_on_wine", false));
+                    @Override
+                    public void onFailed(int reason) {
+                        dialog.closeOnUiThread();
+                        int resId = switch (reason) {
+                            case MidiManager.ERROR_BADFORMAT -> R.string.sound_font_bad_format;
+                            case MidiManager.ERROR_EXIST -> R.string.sound_font_already_exist;
+                            default -> R.string.sound_font_installed_failed;
+                        };
+                        requireActivity().runOnUiThread(() -> ContentDialog.alert(context, resId, null));
+                    }
+                });
+            };
+
+            // Open the file picker with the request code for SoundFont installation
+            openFile(REQUEST_CODE_INSTALL_SOUNDFONT);
+        });
+
+        btRemoveSF.setOnClickListener(v -> {
+            if (sMIDISoundFont.getSelectedItemPosition() != 0) {
+                ContentDialog.confirm(context, R.string.do_you_want_to_remove_this_sound_font, () -> {
+                    if (MidiManager.removeSF2File(context, sMIDISoundFont.getSelectedItem().toString())) {
+                        AppUtils.showToast(context, R.string.sound_font_removed_success);
+                        MidiManager.loadSFSpinnerWithoutDisabled(sMIDISoundFont);
+                    } else
+                        AppUtils.showToast(context, R.string.sound_font_removed_failed);
+                });
+            } else
+                AppUtils.showToast(context, R.string.cannot_remove_default_sound_font);
+        });
+
+        final CheckBox cbUseDRI3 = view.findViewById(R.id.CBUseDRI3);
+        cbUseDRI3.setChecked(preferences.getBoolean("use_dri3", true));
+
+        final CheckBox cbUseXR = view.findViewById(R.id.CBUseXR);
+        cbUseXR.setChecked(preferences.getBoolean("use_xr", true));
+        if (!XrActivity.isSupported()) {
+            cbUseXR.setVisibility(View.GONE);
+        }
 
         final CheckBox cbEnableWineDebug = view.findViewById(R.id.CBEnableWineDebug);
         cbEnableWineDebug.setChecked(preferences.getBoolean("enable_wine_debug", false));
@@ -144,253 +330,304 @@ public class SettingsFragment extends Fragment {
         final ArrayList<String> wineDebugChannels = new ArrayList<>(Arrays.asList(preferences.getString("wine_debug_channels", DEFAULT_WINE_DEBUG_CHANNELS).split(",")));
         loadWineDebugChannels(view, wineDebugChannels);
 
-        final Spinner sBox64Logs = view.findViewById(R.id.SBox64Logs);
-        sBox64Logs.setSelection(preferences.getInt("box64_logs", 0));
+        final CheckBox cbEnableBox86_64Logs = view.findViewById(R.id.CBEnableBox86_64Logs);
+        cbEnableBox86_64Logs.setChecked(preferences.getBoolean("enable_box86_64_logs", false));
 
-        final CheckBox cbSaveLogsToFile = view.findViewById(R.id.CBSaveLogsToFile);
-        cbSaveLogsToFile.setChecked(preferences.getBoolean("save_logs_to_file", false));
-
-        final EditText etLogFile = view.findViewById(R.id.ETLogFile);
-        final String defaultLogPath = LogView.getLogFile().getPath();
-        etLogFile.setText(preferences.getString("log_file", defaultLogPath));
-        etLogFile.setVisibility(cbSaveLogsToFile.isChecked() ? View.VISIBLE : View.GONE);
-        cbSaveLogsToFile.setOnCheckedChangeListener((buttonView, isChecked) -> etLogFile.setVisibility(isChecked ? View.VISIBLE : View.GONE));
-
+        final TextView tvCursorSpeed = view.findViewById(R.id.TVCursorSpeed);
         final SeekBar sbCursorSpeed = view.findViewById(R.id.SBCursorSpeed);
-        sbCursorSpeed.setValue(preferences.getFloat("cursor_speed", 1.0f) * 100);
+        sbCursorSpeed.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                tvCursorSpeed.setText(progress+"%");
+            }
 
-        final SeekBar sbCursorSize = view.findViewById(R.id.SBCursorSize);
-        sbCursorSize.setValue(preferences.getFloat("cursor_scale", 1.0f) * 100);
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {}
 
-        final ColorPickerView cpvCursorColor = view.findViewById(R.id.CPVCursorColor);
-        cpvCursorColor.setPalette(0xffffff, 0x000000, 0x651fff, 0xffea00, 0xff9100, 0xf50057, 0x00b0ff, 0x1de9b6);
-        cpvCursorColor.setColor(preferences.getInt("cursor_color", 0xffffff));
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        sbCursorSpeed.setProgress((int)(preferences.getFloat("cursor_speed", 1.0f) * 100));
 
-        final Spinner sPreferredInputApi = view.findViewById(R.id.SPreferredInputApi);
-        sPreferredInputApi.setSelection(preferences.getInt("preferred_input_api", GamepadHandler.PreferredInputApi.AUTO.ordinal()));
+//        final RadioGroup rgTriggerType = view.findViewById(R.id.RGTriggerType);
+//        final View btHelpTriggerMode = view.findViewById(R.id.BTHelpTriggerMode);
+//        List<Integer> triggerRbIds = List.of(R.id.RBTriggerIsButton, R.id.RBTriggerIsAxis, R.id.RBTriggerIsMixed);
+//        int triggerType = preferences.getInt("trigger_type", ExternalController.TRIGGER_IS_AXIS);
+//
+//        if (triggerType >= 0 && triggerType < triggerRbIds.size()) {
+//            ((RadioButton) (rgTriggerType.findViewById(triggerRbIds.get(triggerType)))).setChecked(true);
+//        }
+//        btHelpTriggerMode.setOnClickListener(v -> AppUtils.showHelpBox(context, v, R.string.help_trigger_mode));
 
-        final Spinner sWineVersion = view.findViewById(R.id.SWineVersion);
-        loadWineVersionSpinner(view, sWineVersion);
+        final CheckBox cbEnableFileProvider = view.findViewById(R.id.CBEnableFileProvider);
+        final View btHelpFileProvider = view.findViewById(R.id.BTHelpFileProvider);
 
-        final Spinner sLanguage = view.findViewById(R.id.SLanguage);
-        sLanguage.setSelection(LocaleHelper.getLocaleIndex(context));
-        final int oldLCIndex = sLanguage.getSelectedItemPosition();
+        cbEnableFileProvider.setChecked(preferences.getBoolean("enable_file_provider", true));
+        cbEnableFileProvider.setOnClickListener(v -> AppUtils.showToast(context, R.string.take_effect_next_startup));
+        btHelpFileProvider.setOnClickListener(v -> AppUtils.showHelpBox(context, v, R.string.help_file_provider));
 
-        view.findViewById(R.id.BTReinstallSystemFiles).setOnClickListener((v) -> {
-            ContentDialog.confirm(context, R.string.do_you_want_to_reinstall_system_files, () -> RootFSInstaller.install((MainActivity)getActivity()));
+        final CheckBox cbOpenInBrowser = view.findViewById(R.id.CBOpenWithAndroidBrowser);
+        cbOpenInBrowser.setChecked(preferences.getBoolean("open_with_android_browser", false));
+
+        final CheckBox cbShareClipboard = view.findViewById(R.id.CBShareAndroidClipboard);
+        cbShareClipboard.setChecked(preferences.getBoolean("share_android_clipboard", false));
+
+        final CheckBox CBEnablePebLogs = view.findViewById(R.id.CBEnablePebLogs);
+        CBEnablePebLogs.setChecked(preferences.getBoolean("enable_peb_logs", false));
+
+        view.findViewById(R.id.BTReInstallImagefs).setOnClickListener(v -> {
+            ContentDialog.confirm(context, R.string.do_you_want_to_reinstall_imagefs, () -> ImageFsInstaller.installFromAssets((MainActivity) getActivity()));
         });
 
-        loadGamepadPlayerConfigs(view);
+        // Add backup button
+        Button btnBackupData = view.findViewById(R.id.BTBackupData);
+        btnBackupData.setOnClickListener(v -> {
+            showBackupConfirmationDialog();
+        });
 
-        if (MainActivity.DEBUG_MODE) {
-            view.findViewById(R.id.LLWineInstallation).setVisibility(View.VISIBLE);
-        }
+        // Add restore button
+        Button btnRestoreData = view.findViewById(R.id.BTRestoreData);
+        btnRestoreData.setOnClickListener(v -> {
+            selectBackupFileForRestore();
+        });
 
+//        int finalSelectedIndex = selectedIndex;
         view.findViewById(R.id.BTConfirm).setOnClickListener((v) -> {
             SharedPreferences.Editor editor = preferences.edit();
-            editor.putString("soundfont", sSoundFont.getSelectedItem().toString());
-            editor.putString("box64_version", StringUtils.parseIdentifier(sBox64Version.getSelectedItem()));
-            editor.putString("box64_preset", Box64PresetManager.getSpinnerSelectedId(sBox64Preset));
-            editor.putBoolean("move_cursor_to_touchpoint", cbMoveCursorToTouchpoint.isChecked());
-            editor.putBoolean("capture_pointer_on_external_mouse", cbCapturePointerOnExternalMouse.isChecked());
-            editor.putFloat("cursor_speed", sbCursorSpeed.getValue() / 100.0f);
-            editor.putFloat("cursor_scale", sbCursorSize.getValue() / 100.0f);
-            editor.putInt("cursor_color", cpvCursorColor.getColor());
+
+            editor.putBoolean("dark_mode", cbDarkMode.isChecked());
+            editor.putString("box64_preset", Box86_64PresetManager.getSpinnerSelectedId(sBox64Preset));
+            editor.putBoolean("use_dri3", cbUseDRI3.isChecked());
+            editor.putBoolean("use_xr", cbUseXR.isChecked());
+            editor.putFloat("cursor_speed", sbCursorSpeed.getProgress() / 100.0f);
             editor.putBoolean("enable_wine_debug", cbEnableWineDebug.isChecked());
-            editor.putInt("box64_logs", sBox64Logs.getSelectedItemPosition());
-            editor.putBoolean("save_logs_to_file", cbSaveLogsToFile.isChecked());
-            editor.putInt("preferred_input_api", sPreferredInputApi.getSelectedItemPosition());
-            editor.putBoolean("open_android_browser_from_wine", cbOpenAndroidBrowserFromWine.isChecked());
-            editor.putBoolean("use_android_clipboard_on_wine", cbUseAndroidClipboardOnWine.isChecked());
-            putGamepadPlayerConfigs(view, editor);
+            editor.putBoolean("enable_box86_64_logs", cbEnableBox86_64Logs.isChecked());
+//            editor.putInt("trigger_type", triggerRbIds.indexOf(rgTriggerType.getCheckedRadioButtonId()));
+//            editor.putBoolean("cursor_lock", cbCursorLock.isChecked()); // Save cursor lock state
+            editor.putBoolean("xinput_toggle", cbXinputToggle.isChecked()); // Save xinput toggle state
+            editor.putBoolean("touchscreen_toggle", cbXTouchscreenToggle.isChecked()); // Save touchscreen toggle state
+            editor.putBoolean("enable_file_provider", cbEnableFileProvider.isChecked());
+            editor.putBoolean("open_with_android_browser", cbOpenInBrowser.isChecked());
+            editor.putBoolean("share_android_clipboard", cbShareClipboard.isChecked());
+            editor.putBoolean("enable_peb_logs", CBEnablePebLogs.isChecked());
 
-            int newAppThemeId = rgAppTheme.getCheckedRadioButtonId();
-            editor.putInt("app_theme", newAppThemeId == R.id.RBLight ? APP_THEME_LIGHT : APP_THEME_DARK);
 
-            int newLCIndex = sLanguage.getSelectedItemPosition();
-            editor.putInt("lc_index", newLCIndex);
-            boolean restartApp = oldLCIndex != newLCIndex || oldAppThemeId != newAppThemeId;
+            // Save gyro settings
+//            editor.putBoolean("gyro_enabled", cbGyroEnabled.isChecked());
+//            //editor.putBoolean("process_gyro_with_left_trigger", cbProcessGyroWithLeftTrigger.isChecked()); // Older method
+//
+//            int selectedKeycode = keycodes[sbGyroTriggerButton.getSelectedItemPosition()];
 
-            int midiInputDevicePosition = sMIDIInputDevice.getSelectedItemPosition();
-            editor.putString("midi_input_device", midiInputDevicePosition == 0 ? "none" :
-                                                 (midiInputDevicePosition == 1 ? "auto" : sMIDIInputDevice.getSelectedItem().toString()));
+            // Save the selected keycode to preferences
+//            editor.putInt("gyro_trigger_button", selectedKeycode);
+//
+//            editor.putInt("gyro_mode", rgGyroMode.getCheckedRadioButtonId() == R.id.RBHoldMode ? 0 : 1);
 
-            String logPath = etLogFile.getText().toString().trim();
-            if (!logPath.equals(defaultLogPath) && !logPath.isEmpty()) {
-                editor.putString("log_file", logPath);
-            }
-            else editor.remove("log_file");
+
 
             if (!wineDebugChannels.isEmpty()) {
                 editor.putString("wine_debug_channels", String.join(",", wineDebugChannels));
+            } else if (preferences.contains("wine_debug_channels")) {
+                editor.remove("wine_debug_channels");
             }
             else if (preferences.contains("wine_debug_channels")) editor.remove("wine_debug_channels");
 
+            editor.putBoolean("legacy_mode_enabled", enableLegacyInputMode); // Save the 7.1.2 legacy mode state
+
+            // Save Big Picture Mode setting
+            editor.putBoolean("enable_big_picture_mode", ((CheckBox) view.findViewById(R.id.CBEnableBigPictureMode)).isChecked());
+            saveCustomApiKeySettings(editor);
+
             if (editor.commit()) {
-                if (!restartApp) {
-                    NavigationView navigationView = getActivity().findViewById(R.id.NavigationView);
-                    navigationView.setCheckedItem(R.id.menu_item_containers);
-                    FragmentManager fragmentManager = getParentFragmentManager();
-                    fragmentManager.beginTransaction()
+                NavigationView navigationView = getActivity().findViewById(R.id.NavigationView);
+                navigationView.setCheckedItem(R.id.main_menu_containers);
+                FragmentManager fragmentManager = getParentFragmentManager();
+                fragmentManager.beginTransaction()
                         .replace(R.id.FLFragmentContainer, new ContainersFragment())
                         .commit();
-                }
-                else AppUtils.restartActivity(getActivity());
             }
         });
+
+
 
         return view;
     }
 
-    private void loadBox64PresetSpinner(View view, final Spinner sBox64Preset) {
+    private void updateTheme(boolean isDarkMode) {
+        if (isDarkMode) {
+            getActivity().setTheme(R.style.AppTheme_Dark);
+        } else {
+            getActivity().setTheme(R.style.AppTheme);
+        }
+
+        // Recreate the activity to apply the new theme
+        getActivity().recreate();
+    }
+
+
+    private void applyDynamicStyles(View view, boolean isDarkMode) {
+
+        Spinner sBox64Preset = view.findViewById(R.id.SBox64Preset);
+        sBox64Preset.setPopupBackgroundResource(isDarkMode ? R.drawable.content_dialog_background_dark : R.drawable.content_dialog_background);
+
+    }
+
+    private void applyDynamicStylesRecursively(View view) {
+        TextView box86box64Label = view.findViewById(R.id.TVBox86Box64);
+        applyFieldSetLabelStyle(box86box64Label, isDarkMode);
+
+        TextView soundLabel = view.findViewById(R.id.TVSound);
+        applyFieldSetLabelStyle(soundLabel, isDarkMode);
+
+        TextView themeLabel = view.findViewById(R.id.TVTheme);
+        applyFieldSetLabelStyle(themeLabel, isDarkMode);
+
+        TextView shortcutSettingsLabel = view.findViewById(R.id.TVShortcutSettings);
+        applyFieldSetLabelStyle(shortcutSettingsLabel, isDarkMode);
+
+        TextView bigPictureModeLabel = view.findViewById(R.id.TVBigPictureMode);
+        applyFieldSetLabelStyle(bigPictureModeLabel, isDarkMode);
+
+        TextView tvCustomApiKey = view.findViewById(R.id.TVCustomApiKey);
+        applyFieldSetLabelStyle(tvCustomApiKey, isDarkMode);
+
+        // TextView shortcutSettingsLabel = view.findViewById(R.id.TVShortcutSettings);
+        // applyFieldSetLabelStyle(shortcutSettingsLabel, isDarkMode);
+
+        // Inputs tab labels
+        TextView xServerLabel = view.findViewById(R.id.TVXServer);
+        applyFieldSetLabelStyle(xServerLabel, isDarkMode);
+
+//        TextView gyroSettingsLabel = view.findViewById(R.id.TVGyroSettings);
+//        applyFieldSetLabelStyle(gyroSettingsLabel, isDarkMode);
+
+        TextView gameControllerLabel = view.findViewById(R.id.TVGameControllerLabel);
+        applyFieldSetLabelStyle(gameControllerLabel, isDarkMode);
+
+        // Advanced tab labels
+        TextView logsLabel = view.findViewById(R.id.TVLogs);
+        applyFieldSetLabelStyle(logsLabel, isDarkMode);
+
+        TextView experimentalLabel = view.findViewById(R.id.TVExperimental);
+        applyFieldSetLabelStyle(experimentalLabel, isDarkMode);
+
+        TextView ImageFsLabel = view.findViewById(R.id.TVImageFs);
+        applyFieldSetLabelStyle(ImageFsLabel, isDarkMode);
+
+    }
+
+    private void applyFieldSetLabelStyle(TextView textView, boolean isDarkMode) {
+//        Context context = textView.getContext();
+
+        if (isDarkMode) {
+            // Apply dark mode-specific attributes
+            textView.setTextColor(Color.parseColor("#cccccc")); // Set text color to #cccccc
+            textView.setBackgroundResource(R.color.window_background_color_dark); // Set dark background color
+        } else {
+            // Apply light mode-specific attributes (original FieldSetLabel)
+            textView.setTextColor(Color.parseColor("#bdbdbd")); // Set text color to #bdbdbd
+            textView.setBackgroundResource(R.color.window_background_color); // Set light background color
+        }
+    }
+
+    private void initCustomApiKeySettings(View view) {
+        cbEnableCustomApiKey = view.findViewById(R.id.CBEnableCustomApiKey);
+        etCustomApiKey = view.findViewById(R.id.ETCustomApiKey);
+
+        // Load saved preferences
+        boolean isCustomApiKeyEnabled = preferences.getBoolean("enable_custom_api_key", false);
+        String customApiKey = preferences.getString("custom_api_key", "");
+
+        cbEnableCustomApiKey.setChecked(isCustomApiKeyEnabled);
+        etCustomApiKey.setText(customApiKey);
+
+        // Show/hide the EditText based on checkbox state
+        etCustomApiKey.setVisibility(isCustomApiKeyEnabled ? View.VISIBLE : View.GONE);
+
+        cbEnableCustomApiKey.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            etCustomApiKey.setVisibility(isChecked ? View.VISIBLE : View.GONE);
+        });
+
+        // Help button listener to open API documentation
+        view.findViewById(R.id.BTHelpApiKey).setOnClickListener(v -> {
+            String url = "https://www.steamgriddb.com/profile/preferences/api";
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            startActivity(intent);
+        });
+    }
+
+    private void saveCustomApiKeySettings(SharedPreferences.Editor editor) {
+        // Save custom API key preferences
+        boolean isCustomApiKeyEnabled = cbEnableCustomApiKey.isChecked();
+        editor.putBoolean("enable_custom_api_key", isCustomApiKeyEnabled);
+
+        if (isCustomApiKeyEnabled) {
+            String customApiKey = etCustomApiKey.getText().toString().trim();
+            editor.putString("custom_api_key", customApiKey);
+        } else {
+            editor.remove("custom_api_key");
+        }
+    }
+
+    private void loadBox86_64PresetSpinners(View view, final Spinner sBox64Preset) {
+        final ArrayMap<String, Spinner> spinners = new ArrayMap<String, Spinner>() {{
+            put("box64", sBox64Preset);
+        }};
         final Context context = getContext();
 
-        Runnable updateSpinner = () -> {
-            Box64PresetManager.loadSpinner(sBox64Preset, preferences.getString("box64_preset", Box64Preset.DEFAULT));
+        Callback<String> updateSpinner = (prefix) -> {
+            Box86_64PresetManager.loadSpinner(prefix, spinners.get(prefix), preferences.getString(prefix+"_preset", Box86_64Preset.COMPATIBILITY));
         };
 
-        updateSpinner.run();
+        Callback<String> onAddPreset = (prefix) -> {
+            Box86_64EditPresetDialog dialog = new Box86_64EditPresetDialog(context, prefix, null);
+            dialog.setOnConfirmCallback(() -> updateSpinner.call(prefix));
+            dialog.show();
+        };
 
-        view.findViewById(R.id.BTAddBox64Preset).setOnClickListener((v) -> {
-            Box64EditPresetDialog dialog = new Box64EditPresetDialog(context, null);
-            dialog.setOnConfirmCallback(updateSpinner);
+        Callback<String> onEditPreset = (prefix) -> {
+            Box86_64EditPresetDialog dialog = new Box86_64EditPresetDialog(context, prefix, Box86_64PresetManager.getSpinnerSelectedId(spinners.get(prefix)));
+            dialog.setOnConfirmCallback(() -> updateSpinner.call(prefix));
             dialog.show();
+        };
+
+        Callback<String> onDuplicatePreset = (prefix) -> ContentDialog.confirm(context, R.string.do_you_want_to_duplicate_this_preset, () -> {
+            Spinner spinner = spinners.get(prefix);
+            Box86_64PresetManager.duplicatePreset(prefix, context, Box86_64PresetManager.getSpinnerSelectedId(spinner));
+            updateSpinner.call(prefix);
+            spinner.setSelection(spinner.getCount()-1);
         });
-        view.findViewById(R.id.BTEditBox64Preset).setOnClickListener((v) -> {
-            Box64EditPresetDialog dialog = new Box64EditPresetDialog(context, Box64PresetManager.getSpinnerSelectedId(sBox64Preset));
-            dialog.setOnConfirmCallback(updateSpinner);
-            dialog.show();
-        });
-        view.findViewById(R.id.BTDuplicateBox64Preset).setOnClickListener((v) -> {
-            Box64PresetManager.duplicatePreset(context, Box64PresetManager.getSpinnerSelectedId(sBox64Preset));
-            updateSpinner.run();
-            sBox64Preset.setSelection(sBox64Preset.getCount()-1);
-        });
-        view.findViewById(R.id.BTRemoveBox64Preset).setOnClickListener((v) -> {
-            final String presetId = Box64PresetManager.getSpinnerSelectedId(sBox64Preset);
-            if (!presetId.startsWith(Box64Preset.CUSTOM)) {
+
+        Callback<String> onRemovePreset = (prefix) -> {
+            final String presetId = Box86_64PresetManager.getSpinnerSelectedId(spinners.get(prefix));
+            if (!presetId.startsWith(Box86_64Preset.CUSTOM)) {
                 AppUtils.showToast(context, R.string.you_cannot_remove_this_preset);
                 return;
             }
             ContentDialog.confirm(context, R.string.do_you_want_to_remove_this_preset, () -> {
-                Box64PresetManager.removePreset(context, presetId);
-                updateSpinner.run();
-            });
-        });
-    }
-
-    private void removeInstalledWine(WineInfo wineInfo, Runnable onSuccess) {
-        final Activity activity = getActivity();
-        ContainerManager manager = new ContainerManager(activity);
-
-        ArrayList<Container> containers = manager.getContainers();
-        for (Container container : containers) {
-            if (container.getWineVersion().equals(wineInfo.identifier())) {
-                AppUtils.showToast(activity, R.string.unable_to_remove_this_wine_version);
-                return;
-            }
-        }
-
-        File installedWineDir = RootFS.find(activity).getInstalledWineDir();
-        File wineDir = new File(wineInfo.path);
-        File containerPatternFile = new File(installedWineDir, "container-pattern-"+wineInfo.fullVersion()+".tzst");
-
-        if (!wineDir.isDirectory() || !containerPatternFile.isFile()) {
-            AppUtils.showToast(activity, R.string.unable_to_remove_this_wine_version);
-            return;
-        }
-
-        preloaderDialog.show(R.string.removing_wine);
-        Executors.newSingleThreadExecutor().execute(() -> {
-            FileUtils.delete(wineDir);
-            FileUtils.delete(containerPatternFile);
-            preloaderDialog.closeOnUiThread();
-            if (onSuccess != null) activity.runOnUiThread(onSuccess);
-        });
-    }
-
-    private void loadWineVersionSpinner(final View view, final Spinner sWineVersion) {
-        Context context = getContext();
-        final ArrayList<WineInfo> wineInfos = WineInstaller.getInstalledWineInfos(context);
-        sWineVersion.setAdapter(new ArrayAdapter<>(context, android.R.layout.simple_spinner_dropdown_item, wineInfos));
-
-        view.findViewById(R.id.BTInstallWine).setOnClickListener((v) -> selectWineFileForInstall());
-        view.findViewById(R.id.BTRemoveWine).setOnClickListener((v) -> {
-            WineInfo wineInfo = wineInfos.get(sWineVersion.getSelectedItemPosition());
-            if (wineInfo != WineInfo.MAIN_WINE_INFO) {
-                ContentDialog.confirm(getContext(), R.string.do_you_want_to_remove_this_wine_version, () -> {
-                    removeInstalledWine(wineInfo, () -> loadWineVersionSpinner(view, sWineVersion));
-                });
-            }
-        });
-    }
-
-    private void selectWineFileForInstall() {
-        final Context context = getContext();
-        selectWineFileCallback = (uri) -> {
-            preloaderDialog.show(R.string.preparing_installation);
-            WineInstaller.extractWineFileForInstallAsync(context, uri, (wineDir) -> {
-                if (wineDir != null) {
-                    WineInstaller.findWineVersionAsync(context, wineDir, (wineInfo) -> {
-                        preloaderDialog.closeOnUiThread();
-                        if (wineInfo == null) {
-                            AppUtils.showToast(context, R.string.unable_to_install_wine);
-                            return;
-                        }
-
-                        getActivity().runOnUiThread(() -> showWineInstallDialog(wineInfo));
-                    });
-                }
-                else {
-                    AppUtils.showToast(context, R.string.unable_to_install_wine);
-                    preloaderDialog.closeOnUiThread();
-                }
+                Box86_64PresetManager.removePreset(prefix, context, presetId);
+                updateSpinner.call(prefix);
             });
         };
 
+        updateSpinner.call("box64");
+
+        view.findViewById(R.id.BTAddBox64Preset).setOnClickListener((v) -> onAddPreset.call("box64"));
+        view.findViewById(R.id.BTEditBox64Preset).setOnClickListener((v) -> onEditPreset.call("box64"));
+        view.findViewById(R.id.BTDuplicateBox64Preset).setOnClickListener((v) -> onDuplicatePreset.call("box64"));
+        view.findViewById(R.id.BTRemoveBox64Preset).setOnClickListener((v) -> onRemovePreset.call("box64"));
+    }
+
+
+    private void openFile(int requestCode) {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
-        getActivity().startActivityFromFragment(this, intent, MainActivity.OPEN_FILE_REQUEST_CODE);
+
+        // Start activity for result based on the provided request code
+        getActivity().startActivityFromFragment(this, intent, requestCode);
     }
 
-    private void installWine(final WineInfo wineInfo) {
-        Context context = getContext();
-        File installedWineDir = RootFS.find(context).getInstalledWineDir();
-
-        File wineDir = new File(installedWineDir, wineInfo.identifier());
-        if (wineDir.isDirectory()) {
-            AppUtils.showToast(context, R.string.unable_to_install_wine);
-            return;
-        }
-
-        Intent intent = new Intent(context, XServerDisplayActivity.class);
-        intent.putExtra("generate_wineprefix", true);
-        intent.putExtra("wine_info", wineInfo);
-        context.startActivity(intent);
-    }
-
-    private void showWineInstallDialog(final WineInfo wineInfo) {
-        Context context = getContext();
-        ContentDialog dialog = new ContentDialog(context, R.layout.wine_install_dialog);
-        dialog.setCancelable(false);
-        dialog.setCanceledOnTouchOutside(false);
-        dialog.setTitle(R.string.install_wine);
-        dialog.setIcon(R.drawable.icon_wine);
-
-        EditText etVersion = dialog.findViewById(R.id.ETVersion);
-        etVersion.setText("Wine "+wineInfo.version+(wineInfo.subversion != null ? " ("+wineInfo.subversion+")" : ""));
-
-        final EditText etSize = dialog.findViewById(R.id.ETSize);
-        final AtomicLong totalSizeRef = new AtomicLong();
-        FileUtils.getSizeAsync(new File(wineInfo.path), (size) -> {
-            totalSizeRef.addAndGet(size);
-            etSize.post(() -> etSize.setText(StringUtils.formatBytes(totalSizeRef.get())));
-        });
-
-        dialog.setOnConfirmCallback(() -> installWine(wineInfo));
-        dialog.show();
-    }
 
     private void loadWineDebugChannels(final View view, final ArrayList<String> debugChannels) {
         final Context context = getContext();
@@ -412,7 +649,7 @@ public class SettingsFragment extends Fragment {
             catch (JSONException e) {}
 
             final String[] items = ArrayUtils.toStringArray(jsonArray);
-            ContentDialog.showSelectionList(context, R.string.wine_debug_channel, items, true, (selectedPositions) -> {
+            ContentDialog.showMultipleChoiceList(context, R.string.wine_debug_channel, items, (selectedPositions) -> {
                 for (int selectedPosition : selectedPositions) if (!debugChannels.contains(items[selectedPosition])) debugChannels.add(items[selectedPosition]);
                 loadWineDebugChannels(view, debugChannels);
             });
@@ -440,81 +677,509 @@ public class SettingsFragment extends Fragment {
         }
     }
 
-    public static void resetBox64Version(AppCompatActivity activity) {
+    public static void resetEmulatorsVersion(AppCompatActivity activity) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(activity);
         SharedPreferences.Editor editor = preferences.edit();
-        editor.putString("box64_version", DefaultVersion.BOX64);
         editor.remove("current_box64_version");
+        editor.remove("current_wowbox64_version");
+        editor.remove("current_fexcore_version");
         editor.apply();
     }
 
-    private void loadMIDIInputDeviceSpinner(final Spinner sMIDIInputDevice, final String selectedValue) {
-        Context context = getContext();
-        MidiManager mm = (MidiManager)context.getSystemService(Context.MIDI_SERVICE);
-        MidiDeviceInfo[] infos = mm.getDevices();
 
-        if (!midiDeviceCallbackRegistered) {
-            midiDeviceCallbackRegistered = true;
-            mm.registerDeviceCallback(new MidiManager.DeviceCallback() {
-                @Override
-                public void onDeviceAdded(MidiDeviceInfo device) {
-                    loadMIDIInputDeviceSpinner(sMIDIInputDevice, selectedValue);
-                }
 
-                @Override
-                public void onDeviceRemoved(MidiDeviceInfo device) {
-                    loadMIDIInputDeviceSpinner(sMIDIInputDevice, selectedValue);
-                }
-            }, new Handler(Looper.getMainLooper()));
-        }
+    private void showBackupConfirmationDialog() {
+        new AlertDialog.Builder(getContext())
+                .setTitle("Backup Data")
+                .setMessage("Do you want to create a backup of the app's data directory?")
+                .setPositiveButton("Yes", (dialog, which) -> backupAppData())
+                .setNegativeButton("No", null)
+                .show();
+    }
 
-        ArrayList<String> items = new ArrayList<>();
-        items.add(context.getString(R.string.none));
-        items.add(context.getString(R.string.auto));
+    private void backupAppData() {
+        File dataDir = getContext().getFilesDir().getParentFile(); // App's data directory
+        File backupFile = new File(Environment.getExternalStorageDirectory(), "app_data_backup.tar");
 
-        for (MidiDeviceInfo info : infos) {
-            if (info.getOutputPortCount() > 0) {
-                Bundle properties = info.getProperties();
-                items.add(properties.getString(MidiDeviceInfo.PROPERTY_NAME));
+        preloaderDialog.showOnUiThread(R.string.backing_up_data);
+
+        int availableProcessors = Runtime.getRuntime().availableProcessors();
+        ExecutorService compressionExecutor = Executors.newFixedThreadPool(availableProcessors);
+
+        compressionExecutor.execute(() -> {
+            try {
+                TarCompressorUtils.archive(new File[]{dataDir}, backupFile, file -> {
+                    // Exclude the problematic directory
+                    String excludePath = "imagefs/tmp/.sysvshm";
+                    return !file.getAbsolutePath().contains(excludePath);
+                });
+                getActivity().runOnUiThread(() -> {
+                    preloaderDialog.closeOnUiThread();
+                    AppUtils.showToast(getContext(), "Backup completed: " + backupFile.getPath());
+                });
+            } catch (Exception e) {
+                getActivity().runOnUiThread(() -> {
+                    preloaderDialog.closeOnUiThread();
+                    AppUtils.showToast(getContext(), "Backup failed.");
+                });
             }
-        }
+        });
+    }
 
-        sMIDIInputDevice.setAdapter(new ArrayAdapter<>(context, android.R.layout.simple_spinner_dropdown_item, items));
 
-        if (selectedValue.equals("none")) {
-            sMIDIInputDevice.setSelection(0, false);
-        }
-        else if (selectedValue.equals("auto") || !AppUtils.setSpinnerSelectionFromValue(sMIDIInputDevice, selectedValue)) {
-            sMIDIInputDevice.setSelection(1, false);
+
+    private void selectBackupFileForRestore() {
+        isRestoreAction = true; // Set the flag to indicate a restore operation
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        startActivityForResult(intent, MainActivity.OPEN_FILE_REQUEST_CODE);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (resultCode == Activity.RESULT_OK && data != null) {
+            Uri uri = data.getData();
+
+            if (uri != null) {
+                switch (requestCode) {
+                    // Case for File Picker to restore data
+                    case MainActivity.OPEN_FILE_REQUEST_CODE:
+                        if (isRestoreAction) {
+                            restoreAppData(uri);
+                            isRestoreAction = false;  // Reset the flag
+                        }
+                        break;
+
+                    // Case for FilePicker to select frontend export path
+                    case REQUEST_CODE_FRONTEND_EXPORT_PATH:
+                        // Save the selected URI as a string in SharedPreferences
+                        SharedPreferences.Editor editor = preferences.edit();
+                        editor.putString("frontend_export_uri", uri.toString());
+                        editor.apply();
+
+                        // Take persistable URI permission
+                        try {
+                            // Take persistable URI permission with explicit flags
+                            requireContext().getContentResolver().takePersistableUriPermission(
+                                    uri,
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                            );
+                        } catch (SecurityException e) {
+                            AppUtils.showToast(getContext(), "Unable to take persistable permissions: " + e.getMessage());
+                        }
+
+                        // Convert the URI to an absolute path and display it
+                        String fullPath = FileUtils.getFilePathFromUri(getContext(), uri);
+
+                        // Update the TextView with the absolute path or URI string if conversion fails
+                        TextView tvFrontendExportPath = getView().findViewById(R.id.TVFrontendExportPath);
+                        tvFrontendExportPath.setText(fullPath != null ? fullPath : uri.toString());
+                        break;
+
+                    // Case for installing a SoundFont
+                    case REQUEST_CODE_INSTALL_SOUNDFONT:
+                        if (installSoundFontCallback != null) {
+                            try {
+                                installSoundFontCallback.call(uri);
+                            } catch (Exception e) {
+                                AppUtils.showToast(getContext(), R.string.unable_to_install_soundfont);
+                            } finally {
+                                installSoundFontCallback = null;
+                            }
+                        }
+                        break;
+
+                    // Add future cases here for other request codes...
+                    default:
+                        break;
+                }
+            }
         }
     }
 
-    private void loadGamepadPlayerConfigs(View view) {
-        LinearLayout container = view.findViewById(R.id.LLGamepadPlayer);
-        view.findViewById(R.id.BTResetGamepadPlayerConfigs).setOnClickListener((v) -> {
-            ContentDialog.confirm(v.getContext(), R.string.do_you_want_to_reset_configurations, () -> {
-                for (int i = 0; i < container.getChildCount(); i++) container.getChildAt(i).setTag("");
-            });
+    private void restoreAppData(Uri backupUri) {
+        if (getActivity() != null) {  // Ensure the activity is not null
+            Intent intent = new Intent(getActivity(), RestoreActivity.class);
+            intent.setData(backupUri);
+            startActivity(intent);
+            getActivity().finish(); // Close the main activity
+        }
+    }
+
+
+    private void onRestoreSuccess() {
+        getActivity().runOnUiThread(() -> {
+            preloaderDialog.closeOnUiThread();
+            AppUtils.showToast(getContext(), "Data restored successfully.");
+            AppUtils.restartApplication(getActivity());  // Restart the app to apply changes
+        });
+    }
+
+    private void onRestoreFailed() {
+        getActivity().runOnUiThread(() -> {
+            preloaderDialog.closeOnUiThread();
+            AppUtils.showToast(getContext(), "Data restore failed.");
+        });
+    }
+
+
+//    private void showGyroConfigDialog() {
+//        View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.gyro_config_dialog, null);
+//        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+//        builder.setView(dialogView);
+//        builder.setTitle("Gyroscope Configuration");
+//
+//        // Initialize InputControlsView and configure it for displaying the stick
+//        InputControlsView inputControlsView = new InputControlsView(getContext(), true);
+//        inputControlsView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+//        inputControlsView.setEditMode(false);  // Disable edit mode
+//
+//        // Initialize the stick element and set its type to STICK
+//        inputControlsView.initializeStickElement(600, 250, 2.0f);
+//        inputControlsView.getStickElement().setType(ControlElement.Type.STICK); // Set the type to STICK
+//
+//
+//        // Add the InputControlsView to the placeholder in your dialog layout
+//        FrameLayout placeholder = dialogView.findViewById(R.id.stick_placeholder);
+//        placeholder.addView(inputControlsView);
+//
+//        // Redraw the stick in InputControlsView
+//        inputControlsView.invalidate();
+//
+//        // Initialize the "Reset Center" button
+//        Button btnResetCenter = dialogView.findViewById(R.id.btnResetCenter);
+//        btnResetCenter.setOnClickListener(v -> {
+//            // Reset the stick element's position to the center
+//            inputControlsView.resetStickPosition();
+//            inputControlsView.invalidate();  // Redraw the stick
+//        });
+//
+//        // Initialize the UI elements in the dialog
+//        SeekBar sbGyroXSensitivity = dialogView.findViewById(R.id.SBGyroXSensitivity);
+//        SeekBar sbGyroYSensitivity = dialogView.findViewById(R.id.SBGyroYSensitivity);
+//        SeekBar sbGyroSmoothing = dialogView.findViewById(R.id.SBGyroSmoothing);
+//        SeekBar sbGyroDeadzone = dialogView.findViewById(R.id.SBGyroDeadzone);
+//        CheckBox cbInvertGyroX = dialogView.findViewById(R.id.CBInvertGyroX);
+//        CheckBox cbInvertGyroY = dialogView.findViewById(R.id.CBInvertGyroY);
+//        TextView tvGyroXSensitivity = dialogView.findViewById(R.id.TVGyroXSensitivity);
+//        TextView tvGyroYSensitivity = dialogView.findViewById(R.id.TVGyroYSensitivity);
+//        TextView tvGyroSmoothing = dialogView.findViewById(R.id.TVGyroSmoothing);
+//        TextView tvGyroDeadzone = dialogView.findViewById(R.id.TVGyroDeadzone);
+//
+//
+//        // Load current preferences
+//        sbGyroXSensitivity.setProgress((int) (preferences.getFloat("gyro_x_sensitivity", 1.0f) * 100));
+//        sbGyroYSensitivity.setProgress((int) (preferences.getFloat("gyro_y_sensitivity", 1.0f) * 100));
+//        sbGyroSmoothing.setProgress((int) (preferences.getFloat("gyro_smoothing", 0.9f) * 100));
+//        sbGyroDeadzone.setProgress((int) (preferences.getFloat("gyro_deadzone", 0.05f) * 100));
+//        cbInvertGyroX.setChecked(preferences.getBoolean("invert_gyro_x", false));
+//        cbInvertGyroY.setChecked(preferences.getBoolean("invert_gyro_y", false));
+//
+//        // Update text views for SeekBars
+//        tvGyroXSensitivity.setText("X Sensitivity: " + sbGyroXSensitivity.getProgress() + "%");
+//        tvGyroYSensitivity.setText("Y Sensitivity: " + sbGyroYSensitivity.getProgress() + "%");
+//        tvGyroSmoothing.setText("Smoothing: " + sbGyroSmoothing.getProgress() + "%");
+//        tvGyroDeadzone.setText("Deadzone: " + sbGyroDeadzone.getProgress() + "%");
+//
+//        // Listeners for SeekBars
+//        sbGyroXSensitivity.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+//            @Override
+//            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+//                tvGyroXSensitivity.setText("X Sensitivity: " + progress + "%");
+//            }
+//
+//            @Override
+//            public void onStartTrackingTouch(SeekBar seekBar) {}
+//
+//            @Override
+//            public void onStopTrackingTouch(SeekBar seekBar) {}
+//        });
+//
+//        sbGyroYSensitivity.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+//            @Override
+//            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+//                tvGyroYSensitivity.setText("Y Sensitivity: " + progress + "%");
+//            }
+//
+//            @Override
+//            public void onStartTrackingTouch(SeekBar seekBar) {}
+//
+//            @Override
+//            public void onStopTrackingTouch(SeekBar seekBar) {}
+//        });
+//
+//        sbGyroSmoothing.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+//            @Override
+//            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+//                tvGyroSmoothing.setText("Smoothing: " + progress + "%");
+//            }
+//
+//            @Override
+//            public void onStartTrackingTouch(SeekBar seekBar) {}
+//
+//            @Override
+//            public void onStopTrackingTouch(SeekBar seekBar) {}
+//        });
+//
+//        sbGyroDeadzone.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+//            @Override
+//            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+//                tvGyroDeadzone.setText("Deadzone: " + progress + "%");
+//            }
+//
+//            @Override
+//            public void onStartTrackingTouch(SeekBar seekBar) {}
+//
+//            @Override
+//            public void onStopTrackingTouch(SeekBar seekBar) {}
+//        });
+//
+//        // SensorManager to handle gyroscope input and affect only the thumbstick position within a fixed radius
+//        SensorManager sensorManager = (SensorManager) getContext().getSystemService(Context.SENSOR_SERVICE);
+//        Sensor gyroscopeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+//
+//        // Define variables for smoothing and deadzone
+//        final float[] smoothGyroX = {0};
+//        final float[] smoothGyroY = {0};
+//        float smoothingFactor = preferences.getFloat("gyro_smoothing", 0.9f);  // User-defined smoothing factor
+//        float gyroDeadzone = preferences.getFloat("gyro_deadzone", 0.05f);      // User-defined deadzone
+//        boolean invertGyroX = preferences.getBoolean("invert_gyro_x", false);   // User-defined inversion for X axis
+//        boolean invertGyroY = preferences.getBoolean("invert_gyro_y", false);   // User-defined inversion for Y axis
+//        float gyroSensitivityX = preferences.getFloat("gyro_x_sensitivity", 1.0f); // User-defined sensitivity for X axis
+//        float gyroSensitivityY = preferences.getFloat("gyro_y_sensitivity", 1.0f); // User-defined sensitivity for Y axis
+//
+//        SensorEventListener gyroListener = new SensorEventListener() {
+//            @Override
+//            public void onSensorChanged(SensorEvent event) {
+//                float rawGyroX = event.values[0];  // Gyroscope X axis value
+//                float rawGyroY = event.values[1];  // Gyroscope Y axis value
+//
+//                // Apply deadzone
+//                if (Math.abs(rawGyroX) < gyroDeadzone) rawGyroX = 0;
+//                if (Math.abs(rawGyroY) < gyroDeadzone) rawGyroY = 0;
+//
+//                // Apply inversion
+//                if (invertGyroX) rawGyroX = -rawGyroX;
+//                if (invertGyroY) rawGyroY = -rawGyroY;
+//
+//                // Apply sensitivity
+//                rawGyroX *= gyroSensitivityX;
+//                rawGyroY *= gyroSensitivityY;
+//
+//                // Apply smoothing (exponential smoothing)
+//                smoothGyroX[0] = smoothGyroX[0] * smoothingFactor + rawGyroX * (1 - smoothingFactor);
+//                smoothGyroY[0] = smoothGyroY[0] * smoothingFactor + rawGyroY * (1 - smoothingFactor);
+//
+//                // Define the outer stick's center as a fixed point (outer circle center)
+//                int stickCenterX = inputControlsView.getStickElement().getX(); // Base stick X (center of outer circle)
+//                int stickCenterY = inputControlsView.getStickElement().getY(); // Base stick Y (center of outer circle)
+//                int stickRadius = 100;  // Example radius (adjust as needed)
+//
+//                // Calculate the new thumbstick (inner circle) position based on the smoothed gyro data
+//                float newX = inputControlsView.getStickElement().getCurrentPosition().x + smoothGyroX[0];
+//                float newY = inputControlsView.getStickElement().getCurrentPosition().y + smoothGyroY[0];
+//
+//                // Calculate the distance between the new thumbstick position and the outer circle center
+//                float deltaX = newX - stickCenterX;
+//                float deltaY = newY - stickCenterY;
+//                float distance = (float) Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+//
+//                // Constrain the inner circle within the outer circle's radius
+//                if (distance > stickRadius) {
+//                    float scaleFactor = stickRadius / distance;
+//                    newX = stickCenterX + deltaX * scaleFactor;
+//                    newY = stickCenterY + deltaY * scaleFactor;
+//                }
+//
+//                // Update the thumbstick (inner circle) position, but keep the outer circle fixed
+//                inputControlsView.updateStickPosition(newX, newY);
+//
+//                // Redraw InputControlsView to reflect the new thumbstick position
+//                inputControlsView.invalidate();
+//            }
+//
+//            @Override
+//            public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+//        };
+//
+//        sensorManager.registerListener(gyroListener, gyroscopeSensor, SensorManager.SENSOR_DELAY_GAME);
+//
+//        // Set up the dialog buttons
+//        builder.setPositiveButton("OK", (dialog, which) -> {
+//            SharedPreferences.Editor editor = preferences.edit();
+//            editor.putFloat("gyro_x_sensitivity", sbGyroXSensitivity.getProgress() / 100.0f);
+//            editor.putFloat("gyro_y_sensitivity", sbGyroYSensitivity.getProgress() / 100.0f);
+//            editor.putFloat("gyro_smoothing", sbGyroSmoothing.getProgress() / 100.0f);
+//            editor.putFloat("gyro_deadzone", sbGyroDeadzone.getProgress() / 100.0f);
+//            editor.putBoolean("invert_gyro_x", cbInvertGyroX.isChecked());
+//            editor.putBoolean("invert_gyro_y", cbInvertGyroY.isChecked());
+//            editor.apply();
+//        });
+//
+//        builder.setNegativeButton("Cancel", null);
+//
+//        // Show the dialog
+//        builder.create().show();
+//    }
+
+    private void showAnalogStickConfigDialog() {
+        // Inflate the dialog layout
+        LayoutInflater inflater = LayoutInflater.from(getContext());
+        View dialogView = inflater.inflate(R.layout.analog_stick_config_dialog, null);
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        builder.setView(dialogView);
+        builder.setTitle("Configure Analog Sticks");
+        builder.setCancelable(false);
+
+        // Initialize UI elements
+        SeekBar sbLeftDeadzone = dialogView.findViewById(R.id.SBLeftDeadzone);
+        TextView tvLeftDeadzone = dialogView.findViewById(R.id.TVLeftDeadzone);
+
+        SeekBar sbLeftSensitivity = dialogView.findViewById(R.id.SBLeftSensitivity);
+        TextView tvLeftSensitivity = dialogView.findViewById(R.id.TVLeftSensitivity);
+
+        SeekBar sbRightDeadzone = dialogView.findViewById(R.id.SBRightDeadzone);
+        TextView tvRightDeadzone = dialogView.findViewById(R.id.TVRightDeadzone);
+
+        SeekBar sbRightSensitivity = dialogView.findViewById(R.id.SBRightSensitivity);
+        TextView tvRightSensitivity = dialogView.findViewById(R.id.TVRightSensitivity);
+
+        CheckBox cbInvertLeftX = dialogView.findViewById(R.id.CBInvertLeftStickX);
+        CheckBox cbInvertLeftY = dialogView.findViewById(R.id.CBInvertLeftStickY);
+        CheckBox cbInvertRightX = dialogView.findViewById(R.id.CBInvertRightStickX);
+        CheckBox cbInvertRightY = dialogView.findViewById(R.id.CBInvertRightStickY);
+
+        // New checkbox for square deadzone
+        CheckBox cbLeftStickSquareDeadzone = dialogView.findViewById(R.id.CBLeftStickSquareDeadzone);
+
+        // Load current preferences
+        float currentDeadzoneLeft = preferences.getFloat(PreferenceKeys.DEADZONE_LEFT, 0.1f) * 100; // Convert to percentage
+        float currentDeadzoneRight = preferences.getFloat(PreferenceKeys.DEADZONE_RIGHT, 0.1f) * 100;
+        float currentSensitivityLeft = preferences.getFloat(PreferenceKeys.SENSITIVITY_LEFT, 1.0f) * 100; // Convert to percentage
+        float currentSensitivityRight = preferences.getFloat(PreferenceKeys.SENSITIVITY_RIGHT, 1.0f) * 100;
+        boolean squareDeadzoneLeft = preferences.getBoolean(PreferenceKeys.SQUARE_DEADZONE_LEFT, false);
+
+        boolean invertLeftX = preferences.getBoolean(PreferenceKeys.INVERT_LEFT_X, false);
+        boolean invertLeftY = preferences.getBoolean(PreferenceKeys.INVERT_LEFT_Y, false);
+        boolean invertRightX = preferences.getBoolean(PreferenceKeys.INVERT_RIGHT_X, false);
+        boolean invertRightY = preferences.getBoolean(PreferenceKeys.INVERT_RIGHT_Y, false);
+
+        // Set initial values
+        sbLeftDeadzone.setProgress((int) currentDeadzoneLeft);
+        tvLeftDeadzone.setText("Deadzone: " + sbLeftDeadzone.getProgress() + "%");
+
+        sbLeftSensitivity.setProgress((int) currentSensitivityLeft);
+        tvLeftSensitivity.setText("Sensitivity: " + sbLeftSensitivity.getProgress() + "%");
+
+        sbRightDeadzone.setProgress((int) currentDeadzoneRight);
+        tvRightDeadzone.setText("Deadzone: " + sbRightDeadzone.getProgress() + "%");
+
+        sbRightSensitivity.setProgress((int) currentSensitivityRight);
+        tvRightSensitivity.setText("Sensitivity: " + sbRightSensitivity.getProgress() + "%");
+
+        cbInvertLeftX.setChecked(invertLeftX);
+        cbInvertLeftY.setChecked(invertLeftY);
+        cbInvertRightX.setChecked(invertRightX);
+        cbInvertRightY.setChecked(invertRightY);
+
+        cbLeftStickSquareDeadzone.setChecked(squareDeadzoneLeft);
+
+        // Set listeners to update TextViews as SeekBars change
+        sbLeftDeadzone.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                tvLeftDeadzone.setText("Deadzone: " + progress + "%");
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {}
         });
 
-        for (int i = 0; i < container.getChildCount(); i++) {
-            final View child = container.getChildAt(i);
-            child.setTag(preferences.getString("gamepad_player"+i, ""));
-            final byte slot = (byte)i;
-            child.setOnClickListener((v) -> (new GamepadPlayerConfigDialog(child, slot)).show());
-        }
+        sbLeftSensitivity.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                tvLeftSensitivity.setText("Sensitivity: " + progress + "%");
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
+        sbRightDeadzone.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                tvRightDeadzone.setText("Deadzone: " + progress + "%");
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
+        sbRightSensitivity.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                tvRightSensitivity.setText("Sensitivity: " + progress + "%");
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
+        // Set up the dialog buttons
+        builder.setPositiveButton("Save", (dialog, which) -> {
+            // Retrieve and save the updated settings
+            float newDeadzoneLeft = sbLeftDeadzone.getProgress() / 100.0f;
+            float newDeadzoneRight = sbRightDeadzone.getProgress() / 100.0f;
+            float newSensitivityLeft = sbLeftSensitivity.getProgress() / 100.0f;
+            float newSensitivityRight = sbRightSensitivity.getProgress() / 100.0f;
+
+            boolean newInvertLeftX = cbInvertLeftX.isChecked();
+            boolean newInvertLeftY = cbInvertLeftY.isChecked();
+            boolean newInvertRightX = cbInvertRightX.isChecked();
+            boolean newInvertRightY = cbInvertRightY.isChecked();
+
+            // Save to SharedPreferences
+            SharedPreferences.Editor editor = preferences.edit();
+            editor.putFloat(PreferenceKeys.DEADZONE_LEFT, newDeadzoneLeft);
+            editor.putFloat(PreferenceKeys.DEADZONE_RIGHT, newDeadzoneRight);
+            editor.putFloat(PreferenceKeys.SENSITIVITY_LEFT, newSensitivityLeft);
+            editor.putFloat(PreferenceKeys.SENSITIVITY_RIGHT, newSensitivityRight);
+            editor.putBoolean(PreferenceKeys.INVERT_LEFT_X, newInvertLeftX);
+            editor.putBoolean(PreferenceKeys.INVERT_LEFT_Y, newInvertLeftY);
+            editor.putBoolean(PreferenceKeys.INVERT_RIGHT_X, newInvertRightX);
+            editor.putBoolean(PreferenceKeys.INVERT_RIGHT_Y, newInvertRightY);
+            editor.putBoolean(PreferenceKeys.SQUARE_DEADZONE_LEFT, cbLeftStickSquareDeadzone.isChecked());
+            editor.apply();
+
+            // Optionally, notify ExternalController instances to reload preferences
+            // If you have a central manager or singleton, you can call a method here
+            // For example:
+            // ExternalControllerManager.getInstance().reloadPreferences();
+
+            // We'll assume ExternalController instances listen to preference changes
+        });
+
+        builder.setNegativeButton("Cancel", null);
+
+        // Create and show the dialog
+        AlertDialog dialog = builder.create();
+        dialog.show();
     }
 
-    private void putGamepadPlayerConfigs(View view, SharedPreferences.Editor editor) {
-        LinearLayout container = view.findViewById(R.id.LLGamepadPlayer);
-        for (int i = 0; i < container.getChildCount(); i++) {
-            View child = container.getChildAt(i);
-            String config = child.getTag().toString();
-            String key = "gamepad_player"+i;
-            if (!config.isEmpty()) {
-                editor.putString(key, child.getTag().toString());
-            }
-            else editor.remove(key);
-        }
-    }
 }

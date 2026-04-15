@@ -1,15 +1,27 @@
 package com.winlator;
 
 import android.Manifest;
-import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.content.res.Configuration;
+import android.content.res.AssetManager;
+import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.Settings;
+import android.text.Html;
+import android.text.SpannableString;
+import android.text.method.LinkMovementMethod;
+import android.text.style.ForegroundColorSpan;
+import android.util.Log;
 import android.view.MenuItem;
+import android.view.View;
+import android.widget.TextView;
 
 import androidx.annotation.IntRange;
 import androidx.annotation.NonNull;
@@ -25,15 +37,36 @@ import androidx.fragment.app.FragmentManager;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.navigation.NavigationView;
-import com.winlator.contentdialog.AboutDialog;
-import com.winlator.core.AppUtils;
+import com.winlator.R;
+import com.winlator.contentdialog.ContentDialog;
+import com.winlator.contentdialog.ControllerAssignmentDialog;
+import com.winlator.contentdialog.SaveEditDialog;
+import com.winlator.contentdialog.SaveSettingsDialog;
+import com.winlator.contents.ContentProfile;
+import com.winlator.contents.ContentsManager;
 import com.winlator.core.Callback;
-import com.winlator.core.LocaleHelper;
 import com.winlator.core.PreloaderDialog;
-import com.winlator.xenvironment.RootFSInstaller;
+import com.winlator.container.ContainerManager;
+import com.winlator.inputcontrols.ControllerManager;
+import com.winlator.saves.Save;
+import com.winlator.saves.SaveManager;
+import com.winlator.xenvironment.ImageFsInstaller;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
-    public static final boolean DEBUG_MODE = false; // FIXME change to false
     public static final @IntRange(from = 1, to = 19) byte CONTAINER_PATTERN_COMPRESSION_LEVEL = 9;
     public static final byte PERMISSION_WRITE_EXTERNAL_STORAGE_REQUEST_CODE = 1;
     public static final byte OPEN_FILE_REQUEST_CODE = 2;
@@ -44,13 +77,53 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     private boolean editInputControls = false;
     private int selectedProfileId;
     private Callback<Uri> openFileCallback;
-    private SharedPreferences preferences;
-    private Fragment currentFragment;
+    private SharedPreferences sharedPreferences;
+
+    // Add SaveSettingsDialog and SaveEditDialog instances
+    private SaveSettingsDialog saveSettingsDialog;
+    private SaveEditDialog saveEditDialog;
+    private SaveManager saveManager;
+    private ContainerManager containerManager;
+
+    private SaveEditDialog currentSaveEditDialog;
+
+    private boolean isDarkMode;
+
+    private boolean allAccessFilesDialogDismissed = false;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        AppUtils.setActivityTheme(this);
         super.onCreate(savedInstanceState);
+
+        // Initialize the controller management system
+        ControllerManager.getInstance().init(getApplicationContext());
+
+
+        // Get shared preferences
+        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+
+        // Check if Big Picture Mode is enabled
+        boolean isBigPictureModeEnabled = sharedPreferences.getBoolean("enable_big_picture_mode", false);
+
+        if (isBigPictureModeEnabled) {
+            // If enabled, launch the BigPictureActivity and finish MainActivity
+            Intent intent = new Intent(MainActivity.this, BigPictureActivity.class);
+            startActivity(intent);
+        }
+
+        // Load the user's preferred theme
+        sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+        isDarkMode = sharedPreferences.getBoolean("dark_mode", false);
+
+        // Apply the theme based on the preference
+        if (isDarkMode) {
+            setTheme(R.style.AppTheme_Dark);
+        } else {
+            setTheme(R.style.AppTheme);
+        }
+
+
         setContentView(R.layout.main_activity);
 
         drawerLayout = findViewById(R.id.DrawerLayout);
@@ -59,39 +132,229 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
 
         setSupportActionBar(findViewById(R.id.Toolbar));
         ActionBar actionBar = getSupportActionBar();
-        actionBar.setDisplayHomeAsUpEnabled(true);
+        if (actionBar != null) {
+            actionBar.setDisplayHomeAsUpEnabled(true);
+            actionBar.setHomeAsUpIndicator(R.drawable.icon_action_bar_menu);
+        }
 
-        preferences = PreferenceManager.getDefaultSharedPreferences(this);
+        // Determine text color based on dark mode
+        int textColor = isDarkMode ? Color.WHITE : Color.BLACK;
+        setNavigationViewItemTextColor(navigationView, textColor);
+        
+
+        // Initialize SaveManager and ContainerManager
+        saveManager = new SaveManager(this);
+        containerManager = new ContainerManager(this);
 
         Intent intent = getIntent();
         editInputControls = intent.getBooleanExtra("edit_input_controls", false);
         if (editInputControls) {
             selectedProfileId = intent.getIntExtra("selected_profile_id", 0);
             actionBar.setHomeAsUpIndicator(R.drawable.icon_action_bar_back);
-            onNavigationItemSelected(navigationView.getMenu().findItem(R.id.menu_item_input_controls));
-            navigationView.setCheckedItem(R.id.menu_item_input_controls);
-        }
-        else {
-            boolean showShortcutsFirst = preferences.getBoolean("show_shortcuts_first", false);
+            onNavigationItemSelected(navigationView.getMenu().findItem(R.id.main_menu_input_controls));
+            navigationView.setCheckedItem(R.id.main_menu_input_controls);
+        } else {
             int selectedMenuItemId = intent.getIntExtra("selected_menu_item_id", 0);
-            int menuItemId = selectedMenuItemId > 0 ? selectedMenuItemId : (showShortcutsFirst ? R.id.menu_item_shortcuts : R.id.menu_item_containers);
+            int menuItemId = selectedMenuItemId > 0 ? selectedMenuItemId : R.id.main_menu_containers;
 
             actionBar.setHomeAsUpIndicator(R.drawable.icon_action_bar_menu);
             onNavigationItemSelected(navigationView.getMenu().findItem(menuItemId));
             navigationView.setCheckedItem(menuItemId);
-            if (!requestAppPermissions()) RootFSInstaller.installIfNeeded(this);
 
-            int containerId = intent.getIntExtra("container_id", 0);
-            String startPath = intent.getStringExtra("start_path");
-            if (containerId > 0 && startPath != null) {
-                showFragment(new ContainerFileManagerFragment(containerId, startPath));
+            // onCreate(), replace the two blocks with this single block
+            boolean waitingForPerms = requestAppPermissions();
+            if (!waitingForPerms) {
+                ImageFsInstaller.installIfNeeded(this, () ->
+                        checkForAndInstallAssetContents(() -> {
+                            if (!allAccessFilesDialogDismissed
+                                    && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                                    && !Environment.isExternalStorageManager()) {
+                                showAllFilesAccessDialog();
+                            }
+                        }));
             }
+
         }
     }
 
-    @Override
-    protected void attachBaseContext(Context newBase) {
-        super.attachBaseContext(LocaleHelper.setSystemLocale(newBase));
+    /**
+     * Install *.wcp bundles from assets/contents/ that are not already
+     * unpacked in /files/contents/<Type>/<verDir>/.
+     *
+     * Handles case differences and the fact that install dirs end with
+     * “-<verCode>” while the .wcp filename may omit that suffix.
+     */
+    /**
+     * Scan assets/contents/ for *.wcp bundles and install the ones that do
+     * not already exist in /files/contents/<Type>/<verDir>/.
+     *
+     * Handles the following real-world quirks:
+     *   • Folder name may be "type-verDir-<code>" (duplicated type prefix)
+     *   • .wcp may have a leading 'v' in the version that the folder omits
+     *   • '-' and '_' are treated as equivalent separators
+     *   • Case insensitive everywhere
+     *
+     * The PreloaderDialog appears only when an install actually starts.
+     */
+    private void checkForAndInstallAssetContents(@Nullable Runnable onCompletion) {
+
+        Executors.newSingleThreadExecutor().execute(() -> {
+            PreloaderDialog spinner = new PreloaderDialog(this);
+            boolean spinnerShown = false;
+
+            try {
+                /* ----------------------------------------------------------
+                 * 1.  Build a map<type, set<normalisedVersionDir>>
+                 *     where normalisedVersionDir strips:
+                 *       - leading duplicate "type-" prefix
+                 *       - converts to lower-case
+                 *       - replaces '_' with '-'
+                 * ---------------------------------------------------------- */
+                Map<String, Set<String>> installed = new HashMap<>();
+                File root = ContentsManager.getContentDir(this);
+
+                File[] typeDirs = root.listFiles();
+                if (typeDirs != null) {
+                    for (File typeDir : typeDirs) {
+                        if (!typeDir.isDirectory()) continue;
+
+                        String typeKey = typeDir.getName().toLowerCase();
+                        Set<String> vers = new HashSet<>();
+
+                        File[] verDirs = typeDir.listFiles();
+                        if (verDirs != null) {
+                            for (File verDir : verDirs) {
+                                if (!verDir.isDirectory()) continue;
+                                String dirName = verDir.getName();
+
+                                // strip duplicated "type-" prefix if present
+                                String cleaned = dirName.toLowerCase()
+                                        .replace('_', '-');
+                                String dupPrefix = typeKey + "-";
+                                if (cleaned.startsWith(dupPrefix))
+                                    cleaned = cleaned.substring(dupPrefix.length());
+
+                                vers.add(cleaned);
+                            }
+                        }
+                        installed.put(typeKey, vers);
+                    }
+                }
+
+                /* ----------------------------------------------------------
+                 * 2.  Decide which asset bundles still need installing
+                 * ---------------------------------------------------------- */
+                String[] assetNames = getAssets().list("contents");
+                if (assetNames == null) assetNames = new String[0];
+
+                List<String> toInstall = new ArrayList<>();
+
+                for (String asset : assetNames) {
+                    if (!asset.endsWith(".wcp")) continue;
+
+                    String base = asset.substring(0, asset.length() - 4);   // strip ".wcp"
+                    int sep = Math.min(
+                            base.indexOf('-') == -1 ? Integer.MAX_VALUE : base.indexOf('-'),
+                            base.indexOf('_') == -1 ? Integer.MAX_VALUE : base.indexOf('_'));
+                    if (sep == Integer.MAX_VALUE) continue;                 // malformed
+
+                    String typeKey = base.substring(0, sep).toLowerCase();
+                    String verRaw  = base.substring(sep + 1);
+
+                    // normalise version string:
+                    //  - lower-case
+                    //  - '_' → '-'
+                    //  - optional leading 'v' removed for matching
+                    String verNorm = verRaw.toLowerCase().replace('_', '-');
+                    String verNoV  = verNorm.startsWith("v") ? verNorm.substring(1) : verNorm;
+
+                    Set<String> vers = installed.get(typeKey);
+                    boolean exists = false;
+                    if (vers != null) {
+                        for (String dir : vers) {
+                            // dir already lower-cased & '-' normalised
+                            if (dir.equals(verNorm)      ||
+                                    dir.equals(verNoV)        ||
+                                    dir.startsWith(verNorm + "-") ||
+                                    dir.startsWith(verNoV  + "-")) {
+                                exists = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!exists) toInstall.add(asset);
+                }
+
+                if (toInstall.isEmpty()) {
+                    if (onCompletion != null) runOnUiThread(onCompletion);
+                    return;
+                }
+
+                /* ----------------------------------------------------------
+                 * 3.  Install missing bundles
+                 * ---------------------------------------------------------- */
+                ContentsManager cm = new ContentsManager(this);
+                File tmpDir = new File(getCacheDir(), "wcp_asset_tmp");
+                if (!tmpDir.exists()) tmpDir.mkdirs();
+
+                for (String asset : toInstall) {
+
+                    if (!spinnerShown) {
+                        spinnerShown = true;
+                        runOnUiThread(() -> spinner.show(R.string.installing_contents));
+                    }
+
+                    File tmp = new File(tmpDir, asset);
+
+                    // 3a copy asset → tmp
+                    try (InputStream in  = getAssets().open("contents/" + asset);
+                         OutputStream out = new FileOutputStream(tmp)) {
+                        byte[] buf = new byte[8192];
+                        int n;
+                        while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+                    }
+
+                    // 3b two-stage install
+                    ContentsManager.OnInstallFinishedCallback cb =
+                            new ContentsManager.OnInstallFinishedCallback() {
+                                private boolean first = true;
+                                @Override public void onSucceed(ContentProfile p) {
+                                    if (first) { first = false; cm.finishInstallContent(p, this); }
+                                }
+                                @Override public void onFailed(ContentsManager.InstallFailedReason r,
+                                                               Exception e) {
+                                    Log.e("MainActivity","Install failed for "+asset+" : "+r,e);
+                                }
+                            };
+                    cm.extraContentFile(Uri.fromFile(tmp), cb);
+                    tmp.delete();
+                }
+
+            } catch (Exception e) {
+                Log.e("MainActivity", "Asset-content install error", e);
+            } finally {
+                final boolean shown = spinnerShown;        // effectively-final snapshot
+                runOnUiThread(() -> {
+                    if (shown) spinner.close();
+                    if (onCompletion != null) onCompletion.run();
+                });
+            }
+        });
+    }
+
+    private void showAllFilesAccessDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("USB Storage Access")
+                .setMessage("In order to grant access to additional storage devices such as USB storage device, the All Files Access permission must be granted. You can leave this disabled, or you can enable it for USB storage support.")
+                .setPositiveButton("Okay", (dialog, which) -> {
+                    Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                    intent.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                    allAccessFilesDialogDismissed = true;
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     @Override
@@ -99,45 +362,76 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_WRITE_EXTERNAL_STORAGE_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                RootFSInstaller.installIfNeeded(this);
+                ImageFsInstaller.installIfNeeded(this, () -> {
+                    if (!allAccessFilesDialogDismissed
+                            && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                            && !Environment.isExternalStorageManager()) {
+                        showAllFilesAccessDialog();
+                    }
+                });
+            } else {
+                finish();
             }
-            else finish();
         }
     }
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == MainActivity.OPEN_FILE_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
-            if (openFileCallback != null) {
-                openFileCallback.call(data.getData());
-                openFileCallback = null;
-            }
+
+        Log.d("WinActivity", "onActivityResult called with requestCode: " + requestCode + " and resultCode: " + resultCode);
+
+        if (saveSettingsDialog != null && saveSettingsDialog.isShowing()) {
+            Log.d("WinActivity", "Forwarding result to SaveSettingsDialog");
+            saveSettingsDialog.onActivityResult(requestCode, resultCode, data);
+        } else if (saveEditDialog != null && saveEditDialog.isShowing()) {
+            Log.d("WinActivity", "Forwarding result to SaveEditDialog");
+            saveEditDialog.onActivityResult(requestCode, resultCode, data);
+        } else {
+            Log.d("WinActivity", "No dialog found for request code: " + requestCode);
         }
     }
 
-    @Override
-    public void onConfigurationChanged(@NonNull Configuration newConfig) {
-        super.onConfigurationChanged(newConfig);
-        if ((newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE ||
-            newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) && currentFragment instanceof BaseFileManagerFragment) {
-            ((BaseFileManagerFragment)currentFragment).onOrientationChanged();
+    private void showSavesFragment() {
+        SavesFragment fragment = new SavesFragment();
+        getSupportFragmentManager().beginTransaction()
+                .replace(R.id.FLFragmentContainer, fragment)
+                .commit();
+    }
+
+    // Method to show SaveEditDialog
+    public void showSaveEditDialog(Save saveToEdit) {
+        saveEditDialog = new SaveEditDialog(this, saveManager, containerManager, saveToEdit);
+
+        // Check for dark mode and set the background accordingly
+        if (isDarkMode) {
+            saveEditDialog.getWindow().setBackgroundDrawableResource(R.drawable.content_dialog_background_dark);
+        } else {
+            saveEditDialog.getWindow().setBackgroundDrawableResource(R.drawable.content_dialog_background);
+        }
+
+        saveEditDialog.show();
+    }
+
+    public void onSaveAdded() {
+        Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.FLFragmentContainer);
+        if (currentFragment instanceof SavesFragment) {
+            ((SavesFragment) currentFragment).refreshSavesList();
         }
     }
 
     @Override
     public void onBackPressed() {
-        if (currentFragment != null && currentFragment.isVisible()) {
-            if (currentFragment instanceof BaseFileManagerFragment) {
-                BaseFileManagerFragment fileManagerFragment = (BaseFileManagerFragment)currentFragment;
-                if (fileManagerFragment.onBackPressed()) return;
-            }
-            else if (currentFragment instanceof ContainersFragment) {
+        FragmentManager fragmentManager = getSupportFragmentManager();
+        List<Fragment> fragments = fragmentManager.getFragments();
+        for (Fragment fragment : fragments) {
+            if (fragment instanceof ContainersFragment && fragment.isVisible()) {
                 finish();
+                return;
             }
         }
 
-        showFragment(new ContainersFragment());
+        show(new ContainersFragment(), true);  // Pass `true` to trigger the reverse animation
     }
 
     public void setOpenFileCallback(Callback<Uri> openFileCallback) {
@@ -145,36 +439,68 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     }
 
     private boolean requestAppPermissions() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) return false;
+        boolean hasWritePermission = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        boolean hasReadPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        boolean hasManageStoragePermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager();
 
-        String[] permissions = new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE};
-        ActivityCompat.requestPermissions(this, permissions, PERMISSION_WRITE_EXTERNAL_STORAGE_REQUEST_CODE);
-        return true;
+        if (hasWritePermission && hasReadPermission && hasManageStoragePermission) {
+            return false; // All permissions are granted
+        }
+
+        if (!hasWritePermission || !hasReadPermission) {
+            String[] permissions = new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE};
+            ActivityCompat.requestPermissions(this, permissions, PERMISSION_WRITE_EXTERNAL_STORAGE_REQUEST_CODE);
+        }
+
+        return true; // Permissions are still being requested
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem menuItem) {
-        int itemId = menuItem.getItemId();
-        if (itemId == R.id.menu_item_add ||
-            itemId == R.id.menu_item_home ||
-            itemId == R.id.menu_item_view_style ||
-            itemId == R.id.menu_item_new_folder) {
-            return super.onOptionsItemSelected(menuItem);
-        }
-        else {
-            if (editInputControls) {
-                setResult(RESULT_OK);
-                finish();
-            }
-            else {
-                if (currentFragment instanceof BaseFileManagerFragment) {
-                    BaseFileManagerFragment fileManagerFragment = (BaseFileManagerFragment)currentFragment;
-                    if (fileManagerFragment.onOptionsMenuClicked()) return true;
-                }
+        if (menuItem.getItemId() == android.R.id.home) {
+            // Toggle the drawer
+            if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                drawerLayout.closeDrawer(GravityCompat.START);
+            } else {
                 drawerLayout.openDrawer(GravityCompat.START);
             }
             return true;
+        } else if (menuItem.getItemId() == R.id.saves_menu_add) {
+            // Check if we are editing a save
+            Intent intent = getIntent();
+            int editSaveId = intent.getIntExtra("edit_save_id", -1);
+            Save saveToEdit = editSaveId >= 0 ? saveManager.getSaveById(editSaveId) : null;
+
+            // Create and show SaveEditDialog or SaveSettingsDialog as appropriate
+            if (saveToEdit != null) {
+                // Ensure previous dialog is dismissed before showing a new one
+                if (saveEditDialog != null && saveEditDialog.isShowing()) {
+                    saveEditDialog.dismiss();
+                }
+                showSaveEditDialog(saveToEdit); // Use the correct method to show SaveEditDialog
+            } else {
+                saveSettingsDialog = new SaveSettingsDialog(this, saveManager, containerManager);
+
+                // Check for dark mode and set the background accordingly
+                if (isDarkMode) {
+                    saveSettingsDialog.getWindow().setBackgroundDrawableResource(R.drawable.content_dialog_background_dark);
+                } else {
+                    saveSettingsDialog.getWindow().setBackgroundDrawableResource(R.drawable.content_dialog_background);
+                }
+
+                saveSettingsDialog.show();
+            }
+            return true;
+        } else {
+            return super.onOptionsItemSelected(menuItem);
+        }
+    }
+
+    public void toggleDrawer() {
+        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            drawerLayout.closeDrawer(GravityCompat.START);
+        } else {
+            drawerLayout.openDrawer(GravityCompat.START);
         }
     }
 
@@ -186,34 +512,130 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         }
 
         switch (item.getItemId()) {
-            case R.id.menu_item_shortcuts:
-                preferences.edit().putBoolean("show_shortcuts_first", true).apply();
-                showFragment(new ShortcutsFragment());
+            case R.id.main_menu_shortcuts:
+                show(new ShortcutsFragment(), false);  // Forward animation
                 break;
-            case R.id.menu_item_containers:
-                preferences.edit().putBoolean("show_shortcuts_first", false).apply();
-                showFragment(new ContainersFragment());
+            case R.id.main_menu_containers:
+                show(new ContainersFragment(), false);  // Forward animation
                 break;
-            case R.id.menu_item_input_controls:
-                showFragment(new InputControlsFragment(selectedProfileId));
+            case R.id.main_menu_input_controls:
+                show(new InputControlsFragment(selectedProfileId), false);  // Forward animation
                 break;
-            case R.id.menu_item_settings:
-                showFragment(new SettingsFragment());
+            case R.id.main_menu_controller_assignment:
+                ControllerAssignmentDialog.show(this);
+                drawerLayout.closeDrawers();
                 break;
-            case R.id.menu_item_about:
-                (new AboutDialog(this)).show();
+            case R.id.main_menu_box_rc:
+                show(new Box86_64RCFragment(), false);  // Forward animation
+                break;
+            case R.id.main_menu_contents:
+                show(new ContentsFragment(), false);  // Forward animation
+                break;
+            case R.id.main_menu_adrenotools_gpu_drivers:
+                show(new AdrenotoolsFragment(), false);
+                break;
+            case R.id.main_menu_saves:
+                show(new SavesFragment(), false);  // Forward animation
+                break;
+            case R.id.main_menu_settings:
+                show(new SettingsFragment(), false);  // Forward animation
+                break;
+            case R.id.main_menu_about:
+                showAboutDialog();
                 break;
         }
         return true;
     }
 
-    public void showFragment(Fragment fragment) {
+
+    private void show(Fragment fragment, boolean reverse) {
         FragmentManager fragmentManager = getSupportFragmentManager();
-        fragmentManager.beginTransaction()
-            .replace(R.id.FLFragmentContainer, fragment)
-            .commit();
+        if (reverse) {
+            fragmentManager.beginTransaction()
+                    .setCustomAnimations(R.anim.slide_in_down, R.anim.slide_out_up)  // Reverse animation
+                    .replace(R.id.FLFragmentContainer, fragment)
+                    .commit();
+        } else {
+            fragmentManager.beginTransaction()
+                    .setCustomAnimations(R.anim.slide_in_up, R.anim.slide_out_down)  // Forward animation
+                    .replace(R.id.FLFragmentContainer, fragment)
+                    .commit();
+        }
 
         drawerLayout.closeDrawer(GravityCompat.START);
-        currentFragment = fragment;
+    }
+
+    private void showAboutDialog() {
+        ContentDialog dialog = new ContentDialog(this, R.layout.about_dialog);
+        dialog.findViewById(R.id.LLBottomBar).setVisibility(View.GONE);
+
+        if (isDarkMode) {
+            dialog.getWindow().setBackgroundDrawableResource(R.drawable.content_dialog_background_dark);
+        } else {
+            dialog.getWindow().setBackgroundDrawableResource(R.drawable.content_dialog_background);
+        }
+
+        try {
+            final PackageInfo pInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
+
+            TextView tvWebpage = dialog.findViewById(R.id.TVWebpage);
+            tvWebpage.setText(Html.fromHtml("<a href=\"https://www.winlator.org\">winlator.org</a>", Html.FROM_HTML_MODE_LEGACY));
+            tvWebpage.setMovementMethod(LinkMovementMethod.getInstance());
+
+            ((TextView) dialog.findViewById(R.id.TVAppVersion)).setText(getString(R.string.version) + " " + pInfo.versionName);
+
+            String creditsAndThirdPartyAppsHTML = String.join("<br />",
+                    "Winlator was created by Brunodev85 (<a href=\"https://github.com/brunodev85\">Git</a>)",
+                    "Winlator Cmod by <a href=\"https://github.com/coffincolors/winlator\">coffincolors</a>, <a href=\"https://github.com/Pipetto-crypto/winlator\">Pipetto-crypto</a>",
+                    "Winlator Glibc by longjunyu2 (<a href=\"https://github.com/longjunyu2/winlator/\">Fork</a>)",
+                    "Winlator OpenXR by lvonasek (<a href=\"https://github.com/lvonasek\">Git</a>)",
+                    "Big Picture Mode Music by Fumer",
+                    "---",
+                    "Ubuntu RootFs (<a href=\"https://releases.ubuntu.com/focal\">Focal Fossa</a>)",
+                    "Wine (<a href=\"https://www.winehq.org\">winehq.org</a>)",
+                    "Box86/Box64 by <a href=\"https://github.com/ptitSeb\">ptitseb</a>",
+                    "PRoot (<a href=\"https://proot-me.github.io\">proot-me.github.io</a>)",
+                    "Mesa (Turnip/Zink/VirGL) (<a href=\"https://www.mesa3d.org\">mesa3d.org</a>)",
+                    "DXVK (<a href=\"https://github.com/doitsujin/dxvk\">github.com/doitsujin/dxvk</a>)",
+                    "VKD3D (<a href=\"https://gitlab.winehq.org/wine/vkd3d\">gitlab.winehq.org/wine/vkd3d</a>)",
+                    "D8VK (<a href=\"https://github.com/AlpyneDreams/d8vk\">github.com/AlpyneDreams/d8vk</a>)",
+                    "CNC DDraw (<a href=\"https://github.com/FunkyFr3sh/cnc-ddraw\">github.com/FunkyFr3sh/cnc-ddraw</a>)"
+            );
+
+            TextView tvCreditsAndThirdPartyApps = dialog.findViewById(R.id.TVCreditsAndThirdPartyApps);
+            tvCreditsAndThirdPartyApps.setText(Html.fromHtml(creditsAndThirdPartyAppsHTML, Html.FROM_HTML_MODE_LEGACY));
+            tvCreditsAndThirdPartyApps.setMovementMethod(LinkMovementMethod.getInstance());
+
+            // String glibcExpVersionForkHTML = String.join("<br />",
+            // "longjunyu2's <a href=\"https://github.com/longjunyu2/winlator/tree/use-glibc-instead-of-proot\">(Fork)</a>");
+            // TextView tvGlibcExpVersionFork = dialog.findViewById(R.id.TVGlibcExpVersionFork);
+            // tvGlibcExpVersionFork.setText(Html.fromHtml(glibcExpVersionForkHTML, Html.FROM_HTML_MODE_LEGACY));
+            // tvGlibcExpVersionFork.setMovementMethod(LinkMovementMethod.getInstance());
+        } catch (PackageManager.NameNotFoundException e) {
+            e.printStackTrace();
+        }
+
+        dialog.show();
+    }
+
+    private void setNavigationViewItemTextColor(NavigationView navigationView, int color) {
+        for (int i = 0; i < navigationView.getMenu().size(); i++) {
+            MenuItem menuItem = navigationView.getMenu().getItem(i);
+            setMenuItemTextColor(menuItem, color);
+
+            // If the menu item has sub-items, iterate through them
+            if (menuItem.hasSubMenu()) {
+                for (int j = 0; j < menuItem.getSubMenu().size(); j++) {
+                    MenuItem subMenuItem = menuItem.getSubMenu().getItem(j);
+                    setMenuItemTextColor(subMenuItem, color);
+                }
+            }
+        }
+    }
+
+    private void setMenuItemTextColor(MenuItem menuItem, int color) {
+        SpannableString spanString = new SpannableString(menuItem.getTitle());
+        spanString.setSpan(new ForegroundColorSpan(color), 0, spanString.length(), 0);
+        menuItem.setTitle(spanString);
     }
 }

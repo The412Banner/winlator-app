@@ -1,11 +1,12 @@
 package com.winlator.xenvironment.components;
 
-import android.opengl.GLES20;
+import android.util.Log;
 
 import androidx.annotation.Keep;
 
+import com.winlator.renderer.GLRenderer;
 import com.winlator.renderer.Texture;
-import com.winlator.xconnector.ConnectedClient;
+import com.winlator.xconnector.Client;
 import com.winlator.xconnector.ConnectionHandler;
 import com.winlator.xconnector.RequestHandler;
 import com.winlator.xconnector.UnixSocketConfig;
@@ -20,6 +21,7 @@ public class VirGLRendererComponent extends EnvironmentComponent implements Conn
     private final XServer xServer;
     private final UnixSocketConfig socketConfig;
     private XConnectorEpoll connector;
+    private long sharedEGLContextPtr;
 
     static {
         System.loadLibrary("virglrenderer");
@@ -34,38 +36,60 @@ public class VirGLRendererComponent extends EnvironmentComponent implements Conn
     public void start() {
         if (connector != null) return;
         connector = new XConnectorEpoll(socketConfig, this, this);
-        connector.setInitialInputBufferCapacity(0);
-        connector.setInitialOutputBufferCapacity(0);
         connector.start();
     }
 
     @Override
     public void stop() {
         if (connector != null) {
-            connector.destroy();
+            connector.stop();
             connector = null;
         }
     }
 
     @Keep
     private void killConnection(int fd) {
-        connector.killConnection(connector.getClientWidthFd(fd));
+        connector.killConnection(connector.getClient(fd));
+    }
+
+    @Keep
+    private long getSharedEGLContext() {
+        if (sharedEGLContextPtr != 0) return sharedEGLContextPtr;
+        final Thread thread = Thread.currentThread();
+        try {
+            GLRenderer renderer = xServer.getRenderer();
+            renderer.xServerView.queueEvent(() -> {
+                sharedEGLContextPtr = getCurrentEGLContextPtr();
+
+                synchronized(thread) {
+                    thread.notify();
+                }
+            });
+            synchronized (thread) {
+                thread.wait();
+            }
+        }
+        catch (Exception e) {
+            return 0;
+        }
+        return sharedEGLContextPtr;
     }
 
     @Override
-    public void handleConnectionShutdown(ConnectedClient client) {
+    public void handleConnectionShutdown(Client client) {
         long clientPtr = (long)client.getTag();
         destroyClient(clientPtr);
     }
 
     @Override
-    public void handleNewConnection(ConnectedClient client) {
-        long clientPtr = handleNewConnection(client.fd);
+    public void handleNewConnection(Client client) {
+        getSharedEGLContext();
+        long clientPtr = handleNewConnection(client.clientSocket.fd);
         client.setTag(clientPtr);
     }
 
     @Override
-    public boolean handleRequest(ConnectedClient client) throws IOException {
+    public boolean handleRequest(Client client) throws IOException {
         long clientPtr = (long)client.getTag();
         handleRequest(clientPtr);
         return true;
@@ -74,19 +98,38 @@ public class VirGLRendererComponent extends EnvironmentComponent implements Conn
     @Keep
     private void flushFrontbuffer(int drawableId, int framebuffer) {
         Drawable drawable = xServer.drawableManager.getDrawable(drawableId);
-        if (drawable == null) return;
+        if (drawable == null) {
+            Log.e("VirGLRendererComponent", "Drawable not found for drawableId=" + drawableId);
+            return;
+        }
 
         synchronized (drawable.renderLock) {
-            drawable.setData(null);
+            if (framebuffer == 0) {
+                Log.e("VirGLRendererComponent", "Framebuffer is invalid for drawableId=" + drawableId);
+                return;
+            }
+
             Texture texture = drawable.getTexture();
-            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, framebuffer);
-            texture.copyFromReadBuffer(drawable.width, drawable.height);
-            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+            if (texture == null) {
+                Log.e("VirGLRendererComponent", "Texture is null for drawableId=" + drawableId);
+                return;
+            }
+
+            // Ensure existing data is valid before resetting
+            try {
+                texture.copyFromFramebuffer(framebuffer, drawable.width, drawable.height);
+            } catch (Exception e) {
+                Log.e("VirGLRendererComponent", "Error during framebuffer copy: " + e.getMessage(), e);
+                return;
+            }
         }
 
         Runnable onDrawListener = drawable.getOnDrawListener();
-        if (onDrawListener != null) onDrawListener.run();
+        if (onDrawListener != null) {
+            onDrawListener.run();
+        }
     }
+
 
     private native long handleNewConnection(int fd);
 

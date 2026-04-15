@@ -1,90 +1,119 @@
 package com.winlator.core;
 
 import android.os.Process;
-import android.system.Os;
-
-import androidx.annotation.NonNull;
-
-import com.winlator.MainActivity;
+import android.util.Log;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
-import java.util.Scanner;
 import java.util.concurrent.Executors;
-import java.util.regex.Pattern;
 
 public abstract class ProcessHelper {
-    public enum PState {RUNNING, SLEEPING, WAITING, ZOMBIE, STOPPED, DEAD, OTHER}
+    public static final boolean PRINT_DEBUG = true; // FIXME change to false
     private static final ArrayList<Callback<String>> debugCallbacks = new ArrayList<>();
     private static final byte SIGCONT = 18;
     private static final byte SIGSTOP = 19;
-
-    public static class PStat {
-        public int pid = 0;
-        public String name = "";
-        public PState state = PState.OTHER;
-        public int parentPID = 0;
-        public boolean guestProcess = false;
-
-        @NonNull
-        @Override
-        public String toString() {
-            return pid+" "+name+" "+state+" "+parentPID+" "+guestProcess;
-        }
-    }
+    private static final byte SIGTERM = 15;
+    private static final byte SIGKILL = 9;
 
     public static void suspendProcess(int pid) {
         Process.sendSignal(pid, SIGSTOP);
+//        Log.d("ProcessHelper", "Process suspended with pid: " + pid);
     }
 
     public static void resumeProcess(int pid) {
         Process.sendSignal(pid, SIGCONT);
+//        Log.d("ProcessHelper", "Process resumed with pid: " + pid);
+    }
+
+    public static void terminateProcess(int pid) {
+        Process.sendSignal(pid, SIGTERM);
+//        Log.d("ProcessHelper", "Process terminated with pid: " + pid);
+    }
+
+    public static void killProcess(int pid) {
+        Process.sendSignal(pid, SIGKILL);
+//        Log.d("ProcessHelper", "Process killed with pid: " + pid);
+    }
+
+    public static void terminateAllWineProcesses() {
+        for (String process : listRunningWineProcesses()) {
+            terminateProcess(Integer.parseInt(process));
+        }
+    }
+
+    public static void pauseAllWineProcesses() {
+        for (String process : listRunningWineProcesses()) {
+            suspendProcess(Integer.parseInt(process));
+        }
+    }
+
+    public static void resumeAllWineProcesses() {
+        for (String process : listRunningWineProcesses()) {
+            resumeProcess(Integer.parseInt(process));
+        }
     }
 
     public static int exec(String command) {
         return exec(command, null);
     }
 
-    public static int exec(String command, EnvVars envVars) {
-        return exec(command, envVars, null);
+    public static int exec(String command, String[] envp) {
+        return exec(command, envp, null);
     }
 
-    public static int exec(String command, EnvVars envVars, File workingDir) {
-        return exec(command, envVars, workingDir, null);
+    public static int exec(String command, String[] envp, File workingDir) {
+        return exec(command, envp, workingDir, null);
     }
 
-    public static int exec(String command, EnvVars envVars, File workingDir, Callback<Integer> terminationCallback) {
+    public static int exec(String command, String[] envp, File workingDir, Callback<Integer> terminationCallback) {
+        Log.d("ProcessHelper", "env: " + Arrays.toString(envp) + "\ncmd: " + command);
+
+        // Store env vars for future use
+        EnvironmentManager.setEnvVars(envp);
+
         int pid = -1;
         try {
-            ProcessBuilder processBuilder = (new ProcessBuilder(splitCommand(command))).directory(workingDir);
-            if (debugCallbacks.isEmpty()) processBuilder.redirectOutput(new File("/dev/null")).redirectErrorStream(true);
+            Log.d("ProcessHelper", "Splitting command: " + command);
+            String[] splitCommand = splitCommand(command);
+            Log.d("ProcessHelper", "Split command result: " + Arrays.toString(splitCommand));
+            Log.d("ProcessHelper", "Starting process...");
+            ProcessBuilder pb = new ProcessBuilder(splitCommand);
+            pb.directory(workingDir);
+            pb.environment().putAll(EnvironmentManager.getEnvVars());
+            if (debugCallbacks.isEmpty()) {
+                File null_file = new File("/dev/null");
+                pb.redirectError(null_file);
+                pb.redirectOutput(null_file);
+            }
+            //java.lang.Process process = Runtime.getRuntime().exec(splitCommand, envp, workingDir);
+            java.lang.Process process = pb.start();
 
-            Map<String, String> environment = processBuilder.environment();
-            for (String name : envVars) environment.put(name, envVars.get(name));
-
-            java.lang.Process process = processBuilder.start();
+            // Accessing hidden field
+            Log.d("ProcessHelper", "Accessing hidden field to get PID");
             Field pidField = process.getClass().getDeclaredField("pid");
             pidField.setAccessible(true);
             pid = pidField.getInt(process);
             pidField.setAccessible(false);
+            Log.d("ProcessHelper", "Process started with pid: " + pid);
 
             if (!debugCallbacks.isEmpty()) {
                 createDebugThread(process.getInputStream());
                 createDebugThread(process.getErrorStream());
             }
 
-            if (terminationCallback != null) createWaitForThread(process, terminationCallback);
         }
-        catch (Exception e) {}
+        catch (Exception e) {
+            Log.e("ProcessHelper", "Error executing command: " + command, e);
+        }
         return pid;
     }
 
@@ -93,43 +122,38 @@ public abstract class ProcessHelper {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
+                    if (PRINT_DEBUG) System.out.println(line);
                     synchronized (debugCallbacks) {
                         if (!debugCallbacks.isEmpty()) {
                             for (Callback<String> callback : debugCallbacks) callback.call(line);
                         }
-                        else if (MainActivity.DEBUG_MODE) System.out.println(line);
                     }
                 }
             }
-            catch (IOException e) {}
-        });
-    }
-
-    private static void createWaitForThread(java.lang.Process process, final Callback<Integer> terminationCallback) {
-        Executors.newSingleThreadExecutor().execute(() -> {
-            try {
-                int status = process.waitFor();
-                terminationCallback.call(status);
+            catch (IOException e) {
+                Log.e("ProcessHelper", "Error in debug thread", e);
             }
-            catch (InterruptedException e) {}
         });
     }
 
     public static void removeAllDebugCallbacks() {
         synchronized (debugCallbacks) {
             debugCallbacks.clear();
+            Log.d("ProcessHelper", "All debug callbacks removed");
         }
     }
 
     public static void addDebugCallback(Callback<String> callback) {
         synchronized (debugCallbacks) {
             if (!debugCallbacks.contains(callback)) debugCallbacks.add(callback);
+            Log.d("ProcessHelper", "Added debug callback: " + callback.toString());
         }
     }
 
     public static void removeDebugCallback(Callback<String> callback) {
         synchronized (debugCallbacks) {
             debugCallbacks.remove(callback);
+            Log.d("ProcessHelper", "Removed debug callback: " + callback.toString());
         }
     }
 
@@ -216,69 +240,31 @@ public abstract class ProcessHelper {
         return affinityMask;
     }
 
-    public static List<PStat> getChildProcesses() {
-        File procFile = new File("/proc");
-        String[] pids = procFile.list((file, name) -> (new File(file, name)).isDirectory() && name.matches("[0-9]+"));
-        if (pids == null) return Collections.emptyList();
-        ArrayList<PStat> result = new ArrayList<>();
-        int parentPID = Os.getpid();
-
-        for (String pid : pids) {
-            try (Scanner scanner = new Scanner(new FileInputStream("/proc/"+pid+"/stat"))) {
-                PStat pstat = new PStat();
-                int index = 0;
-
-                while (scanner.hasNext() && index < 4) {
-                    switch (index++) {
-                        case 0:
-                            pstat.pid = scanner.nextInt();
-                            break;
-                        case 1:
-                            Pattern oldDelimiter = scanner.delimiter();
-                            scanner.useDelimiter("\\)");
-                            pstat.name = scanner.hasNext() ? scanner.next().substring(2) : "";
-                            scanner.useDelimiter(oldDelimiter);
-                            if (scanner.hasNext()) scanner.next();
-                            break;
-                        case 2: {
-                            switch (scanner.next()) {
-                                case "R":
-                                    pstat.state = PState.RUNNING;
-                                    break;
-                                case "S":
-                                    pstat.state = PState.SLEEPING;
-                                    break;
-                                case "D":
-                                    pstat.state = PState.WAITING;
-                                    break;
-                                case "Z":
-                                    pstat.state = PState.ZOMBIE;
-                                    break;
-                                case "T":
-                                    pstat.state = PState.STOPPED;
-                                    break;
-                                case "X":
-                                    pstat.state = PState.DEAD;
-                                    break;
-                            }
-                            break;
-                        }
-                        case 3:
-                            pstat.parentPID = scanner.nextInt();
-                            break;
-                    }
-                }
-
-                if (pstat.parentPID == parentPID || pstat.pid > parentPID) {
-                    pstat.guestProcess = pstat.name.contains("wine") || pstat.name.contains(".exe");
-                    result.add(pstat);
-                }
+    public static ArrayList<String> listRunningWineProcesses(){
+        File proc = new File("/proc");
+        String[] filters = {"wine", "exe"};
+        String[] allPids;
+        ArrayList<String> filteredPids = new ArrayList<String>();
+        List<String> filterList = Arrays.asList(filters);
+        allPids = proc.list(new FilenameFilter(){
+            public boolean accept(File proc, String filename){
+                return new File(proc, filename).isDirectory() && filename.matches("[0-9]+");
             }
-            catch (Exception e) {
-                return Collections.emptyList();
+        });
+
+        for (int index = 0; index < allPids.length; index++){
+            String data = "";
+            try {
+                FileInputStream fr = new FileInputStream(proc + "/" + allPids[index] + "/stat");
+                BufferedReader br = new BufferedReader(new InputStreamReader(fr));
+                data = br.readLine();
+            }
+            catch (IOException e) {}
+            for (String filter : filterList) {
+                if (data.contains(filter))
+                    filteredPids.add(allPids[index]);
             }
         }
-
-        return result;
+        return filteredPids;
     }
 }

@@ -1,15 +1,17 @@
 package com.winlator.core;
 
-import android.app.Activity;
 import android.content.Context;
-import android.content.Intent;
+import android.content.res.AssetManager;
+import android.database.Cursor;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Environment;
 import android.os.StatFs;
+import android.provider.DocumentsContract;
+import android.provider.OpenableColumns;
 import android.system.ErrnoException;
 import android.system.Os;
-
-import androidx.core.content.FileProvider;
+import android.util.Log;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -24,6 +26,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -32,7 +36,12 @@ import java.util.Stack;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 
+
+
 public abstract class FileUtils {
+
+    private static final String TAG = "FileUtils";
+
     public static byte[] read(Context context, String assetFile) {
         try (InputStream inStream = context.getAssets().open(assetFile)) {
             return StreamUtils.copyToByteArray(inStream);
@@ -141,15 +150,6 @@ public abstract class FileUtils {
         else return targetFile.length() == 0;
     }
 
-    public static boolean isAscendantOf(File srcFile, File dstFile) {
-        File parent = dstFile.getParentFile();
-        while (parent != null) {
-            if (parent.equals(srcFile)) return true;
-            parent = parent.getParentFile();
-        }
-        return false;
-    }
-
     public static boolean copy(File srcFile, File dstFile) {
         return copy(srcFile, dstFile, null);
     }
@@ -157,38 +157,101 @@ public abstract class FileUtils {
     public static boolean copy(File srcFile, File dstFile, Callback<File> callback) {
         if (isSymlink(srcFile)) return true;
         if (srcFile.isDirectory()) {
-            if (isAscendantOf(srcFile, dstFile) || (!dstFile.exists() && !dstFile.mkdirs())) return false;
+            if (!dstFile.exists() && !dstFile.mkdirs()) return false;
             if (callback != null) callback.call(dstFile);
 
             String[] filenames = srcFile.list();
             if (filenames != null) {
                 for (String filename : filenames) {
                     if (!copy(new File(srcFile, filename), new File(dstFile, filename), callback)) {
-                        return false;
+                        Log.e(TAG, "Failed to copy directory: " + srcFile.getAbsolutePath());
+                        // Continue copying other files even if one fails
                     }
                 }
             }
-        }
-        else {
+        } else {
             File parent = dstFile.getParentFile();
             if (!srcFile.exists() || (parent != null && !parent.exists() && !parent.mkdirs())) return false;
 
-            try {
-                FileChannel inChannel = (new FileInputStream(srcFile)).getChannel();
-                FileChannel outChannel = (new FileOutputStream(dstFile)).getChannel();
+            try (FileChannel inChannel = (new FileInputStream(srcFile)).getChannel();
+                 FileChannel outChannel = (new FileOutputStream(dstFile)).getChannel()) {
                 inChannel.transferTo(0, inChannel.size(), outChannel);
-                inChannel.close();
-                outChannel.close();
 
                 if (callback != null) callback.call(dstFile);
                 return dstFile.exists();
-            }
-            catch (IOException e) {
-                return false;
+            } catch (IOException e) {
+                e.printStackTrace();
+                Log.e(TAG, "Failed to copy file: " + srcFile.getAbsolutePath() + " to " + dstFile.getAbsolutePath(), e);
+                // Log error but don't return false, so we skip this file and continue with others
+                return true;
             }
         }
         return true;
     }
+
+
+
+    public static boolean copy(Context context, Object src, File dstFile, Callback<File> callback) {
+        if (src instanceof File) {
+            // Handle File to File copying
+            File sourceFile = (File) src;
+            if (isSymlink(sourceFile)) return true;
+            if (sourceFile.isDirectory()) {
+                if (!dstFile.exists() && !dstFile.mkdirs()) return false;
+                if (callback != null) callback.call(dstFile);
+
+                String[] filenames = sourceFile.list();
+                if (filenames != null) {
+                    for (String filename : filenames) {
+                        if (!copy(context, new File(sourceFile, filename), new File(dstFile, filename), callback)) {
+                            return false;
+                        }
+                    }
+                }
+            } else {
+                File parent = dstFile.getParentFile();
+                if (!sourceFile.exists() || (parent != null && !parent.exists() && !parent.mkdirs())) return false;
+
+                try (FileChannel inChannel = (new FileInputStream(sourceFile)).getChannel();
+                     FileChannel outChannel = (new FileOutputStream(dstFile)).getChannel()) {
+                    inChannel.transferTo(0, inChannel.size(), outChannel);
+
+                    if (callback != null) callback.call(dstFile);
+                    return dstFile.exists();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    return false;
+                }
+            }
+        } else if (src instanceof Uri) {
+            // Handle Uri to File copying, which requires a Context
+            if (context == null) {
+                throw new IllegalArgumentException("Context is required for Uri to File copying");
+            }
+            Uri srcUri = (Uri) src;
+            try (InputStream inputStream = context.getContentResolver().openInputStream(srcUri);
+                 OutputStream outputStream = new FileOutputStream(dstFile)) {
+                byte[] buffer = new byte[1024];
+                int length;
+
+                while ((length = inputStream.read(buffer)) > 0) {
+                    outputStream.write(buffer, 0, length);
+                }
+
+                if (callback != null) callback.call(dstFile);
+                return true;
+            } catch (Exception e) {
+                e.printStackTrace();
+                return false;
+            }
+        }
+
+        // Return false if src is neither File nor Uri
+        return false;
+    }
+
+
+
 
     public static void copy(Context context, String assetFile, File dstFile) {
         if (isDirectory(context, assetFile)) {
@@ -217,22 +280,27 @@ public abstract class FileUtils {
         }
     }
 
-    public static ArrayList<String> readLines(File file) {
-        return readLines(file, false);
+    public static boolean copy(Context context, Uri uri, File dest) {
+        try (InputStream inputStream = context.getContentResolver().openInputStream(uri);
+             OutputStream outputStream = new FileOutputStream(dest)) {
+            byte[] buffer = new byte[1024];
+            int length;
+
+            while ((length = inputStream.read(buffer)) > 0)
+                outputStream.write(buffer, 0, length);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+        return true;
     }
 
-    public static ArrayList<String> readLines(File file, boolean skipEmptyLines) {
+    public static ArrayList<String> readLines(File file) {
         ArrayList<String> lines = new ArrayList<>();
         try (FileInputStream fis = new FileInputStream(file)) {
             BufferedReader reader = new BufferedReader(new InputStreamReader(fis));
             String line;
-            while ((line = reader.readLine()) != null) {
-                if (skipEmptyLines) {
-                    line = line.trim();
-                    if (line.isEmpty()) continue;
-                }
-                lines.add(line);
-            }
+            while ((line = reader.readLine()) != null) lines.add(line);
         }
         catch (IOException e) {
             e.printStackTrace();
@@ -275,47 +343,59 @@ public abstract class FileUtils {
         return tempFile;
     }
 
-    public static String getFilePathFromUri(Uri uri) {
-        String path = null;
-        if (uri.getAuthority().equals("com.android.externalstorage.documents")) {
-            String[] parts = uri.getLastPathSegment().split(":");
-            if (parts[0].equalsIgnoreCase("primary")) path = Environment.getExternalStorageDirectory() + "/" + parts[1];
+    public static String getFilePathFromUriUsingSAF(Context context, Uri uri) {
+        Log.d(TAG, "getFilePathFromUriUsingSAF called with URI: " + uri.toString());
+
+        String documentId;
+        try {
+            documentId = DocumentsContract.getTreeDocumentId(uri);
+        } catch (IllegalArgumentException e) {
+            Log.e(TAG, "Invalid URI: " + uri.toString(), e);
+            return null;
         }
-        return path;
+
+        Log.d(TAG, "Document ID: " + documentId);
+        String[] split = documentId.split(":");
+        String type = split[0];
+        String path = split.length > 1 ? split[1] : "";
+
+        try {
+            path = URLDecoder.decode(path, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            Log.e(TAG, "Error decoding path: " + path, e);
+            return null;
+        }
+
+        if ("primary".equalsIgnoreCase(type)) {
+            return Environment.getExternalStorageDirectory() + "/" + path;
+        } else {
+            return "/mnt/media_rw/" + type + "/" + path;
+        }
     }
 
+
+    public static String getFilePathFromUri(Context context, Uri uri) {
+        Log.d(TAG, "getFilePathFromUri called with URI: " + uri.toString());
+        String filePath = getFilePathFromUriUsingSAF(context, uri);
+        Log.d(TAG, "File path obtained: " + filePath);
+        return filePath;
+    }
+
+
     public static boolean contentEquals(File origin, File target) {
-        if (origin.isDirectory() && target.isDirectory()) {
-            File[] originFiles = origin.listFiles();
-            File[] targetFiles = origin.listFiles();
+        if (origin.length() != target.length()) return false;
 
-            if (originFiles != null && targetFiles != null) {
-                if (originFiles.length != targetFiles.length) return false;
-
-                for (int i = 0; i < originFiles.length; i++) {
-                    if (!contentEquals(originFiles[i], targetFiles[i])) return false;
-                }
-
-                return true;
+        try (InputStream inStream1 = new BufferedInputStream(new FileInputStream(origin));
+             InputStream inStream2 = new BufferedInputStream(new FileInputStream(target))) {
+            int data;
+            while ((data = inStream1.read()) != -1) {
+                if (data != inStream2.read()) return false;
             }
-            else return originFiles == null && targetFiles == null;
+            return true;
         }
-        else if (origin.isFile() && target.isFile()) {
-            if (origin.length() != target.length()) return false;
-
-            try (InputStream inStream1 = new BufferedInputStream(new FileInputStream(origin));
-                 InputStream inStream2 = new BufferedInputStream(new FileInputStream(target))) {
-                int data;
-                while ((data = inStream1.read()) != -1) {
-                    if (data != inStream2.read()) return false;
-                }
-                return true;
-            }
-            catch (IOException e) {
-                return false;
-            }
+        catch (IOException e) {
+            return false;
         }
-        else return false;
     }
 
     public static void getSizeAsync(File file, Callback<Long> callback) {
@@ -400,21 +480,104 @@ public abstract class FileUtils {
         }
     }
 
-    public static String getExtension(String filename) {
-        if (filename == null || filename.isEmpty()) return "";
-        int dotIndex = filename.lastIndexOf(".");
-        return dotIndex != -1 ? filename.substring(dotIndex + 1) : "";
+    public static String readAssetsFile(Context context, String fileName) {
+        try {
+            String l;
+            AssetManager assetManager = context.getAssets();
+            InputStream is = assetManager.open(fileName);
+
+            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+            StringBuilder sb = new StringBuilder();
+
+            while ((l = reader.readLine()) != null) {
+                sb.append(l);
+            }
+
+            reader.close();
+            return sb.toString();
+        } catch (IOException e) {
+            return null;
+        }
     }
 
-    public static void openIntent(Activity activity, String path) {
-        Intent intent;
-        if (path.startsWith("file://")) {
-            File file = new File(Uri.decode(path.replace("file://", "")));
-            intent = new Intent(Intent.ACTION_VIEW, FileProvider.getUriForFile(activity, "com.winlator.FileProvider", file));
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        }
-        else intent = new Intent(Intent.ACTION_VIEW, Uri.parse(path));
-        intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT | Intent.FLAG_ACTIVITY_NEW_TASK);
-        activity.startActivity(intent);
+    public static String getFileSuffix(File file) {
+        return getFileSuffix(file.getAbsolutePath());
     }
+
+    public static String getFileSuffix(String path) {
+        try {
+            int lastDotIndex = path.lastIndexOf('.');
+            return path.substring(lastDotIndex + 1);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    public static File getFileFromUri(Context context, Uri uri) {
+        Log.d(TAG, "getFileFromUri called with URI: " + uri.toString());
+
+        // Try to get the file path using the SAF method first
+        String filePath = getFilePathFromUriUsingSAF(context, uri);
+        if (filePath != null) {
+            File file = new File(filePath);
+            if (file.exists()) {
+                return file;
+            }
+        }
+
+        // If the SAF method fails, try to open the URI directly
+        try {
+            InputStream inputStream = context.getContentResolver().openInputStream(uri);
+            if (inputStream != null) {
+                // Create a temporary file to store the contents
+                File tempFile = File.createTempFile("restore_", ".tmp", context.getCacheDir());
+                try (FileOutputStream outputStream = new FileOutputStream(tempFile)) {
+                    StreamUtils.copy(inputStream, outputStream);
+                }
+                return tempFile;
+            }
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to open URI: " + uri.toString(), e);
+        }
+
+        // If all else fails, return null
+        return null;
+    }
+    public static String getUriFileName(Context context, Uri uri) {
+        String fileName = null;
+        Cursor cursor = context.getContentResolver().query(uri, null, null, null, null);
+
+        if (cursor != null && cursor.moveToFirst()) {
+            int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+            if (nameIndex != -1)
+                fileName = cursor.getString(nameIndex);
+            cursor.close();
+        }
+
+        return fileName;
+    }
+
+    public static boolean saveBitmapToFile(Bitmap bitmap, File file) {
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            // Compress the bitmap and write to the specified file
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+            out.flush();
+            return true;
+        } catch (IOException e) {
+            Log.e(TAG, "Error saving bitmap to file: " + file.getAbsolutePath(), e);
+            return false;
+        }
+    }
+
+    public static boolean writeToBinaryFile(String filename, int position, int data) {
+        try (RandomAccessFile file = new RandomAccessFile(filename, "rw")) {
+           file.seek(position);
+           file.write(data);
+           return true;
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to write data " + data + " at " + position + " to " + filename);
+            return false;
+        }
+    }
+
 }
