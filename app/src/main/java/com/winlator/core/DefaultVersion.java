@@ -6,6 +6,9 @@ import java.util.Locale;
 
 public abstract class DefaultVersion {
     public static final String BOX64 = "0.4.0";
+    public static final String BOX64_BIONIC = "0.3.7-bionic";
+    public static final String WOWBOX64 = "0.3.7";
+    public static final String FEXCORE = "2508";
     public static final String TURNIP = "26.1.0";
     public static final String VORTEK = "2.1";
     public static final String ZINK = "22.2.5";
