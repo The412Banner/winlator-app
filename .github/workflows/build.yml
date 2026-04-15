@@ -2,6 +2,8 @@ name: Build APK
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ bionic ]
 
 jobs:
   build:
@@ -18,9 +20,10 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
-    - name: Install CMake 3.22.1
+    - name: Install CMake 3.22.1 and NDK 29
       run: |
         echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1"
+        echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;29.0.14206865"
 
     - name: Fix duplicate .so conflict
       run: |
@@ -45,5 +48,5 @@ jobs:
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: apk-debug
+        name: winlator-bionic-debug
         path: app/build/outputs/apk/debug/app-debug.apk
