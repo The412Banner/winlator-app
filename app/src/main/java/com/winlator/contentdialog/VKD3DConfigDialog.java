@@ -38,6 +38,10 @@ public class VKD3DConfigDialog extends ContentDialog {
         });
     }
 
+    public static void setEnvVars(Context context, KeyValueSet config, EnvVars envVars) {
+        setEnvVars(config, envVars);
+    }
+
     public static void setEnvVars(KeyValueSet config, EnvVars envVars) {
         envVars.put("DXVK_LOG_LEVEL", "none");
         envVars.put("DXVK_STATE_CACHE_PATH", RootFS.getDosUserCachePath());

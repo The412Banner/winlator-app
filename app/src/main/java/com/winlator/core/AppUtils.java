@@ -328,6 +328,12 @@ public abstract class AppUtils {
         }
     }
 
+    public static int getThemeColor(Context context, int attrId) {
+        TypedValue typedValue = new TypedValue();
+        context.getTheme().resolveAttribute(attrId, typedValue, true);
+        return typedValue.data;
+    }
+
     public static void runDelayed(Runnable callback, long delay) {
         if (callback == null) {
             return;

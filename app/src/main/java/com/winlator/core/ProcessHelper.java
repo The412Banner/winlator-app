@@ -24,6 +24,22 @@ public abstract class ProcessHelper {
     private static final byte SIGTERM = 15;
     private static final byte SIGKILL = 9;
 
+    public enum PState { RUNNING, STOPPED, OTHER }
+
+    public static class PStat {
+        public int pid;
+        public boolean guestProcess;
+        public PState state = PState.OTHER;
+    }
+
+    public static List<PStat> getChildProcesses() {
+        return new ArrayList<>();
+    }
+
+    public static int exec(String command, EnvVars envVars, File workingDir, Callback<Integer> terminationCallback) {
+        return exec(command, envVars != null ? envVars.toStringArray() : null, workingDir, terminationCallback);
+    }
+
     public static void suspendProcess(int pid) {
         Process.sendSignal(pid, SIGSTOP);
 //        Log.d("ProcessHelper", "Process suspended with pid: " + pid);

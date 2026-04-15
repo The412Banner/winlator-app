@@ -51,6 +51,10 @@ public class WineInfo implements Parcelable {
 
     public boolean isArm64EC() { return "arm64ec".equals(arch); }
 
+    public boolean isWin64() {
+        return "x86_64".equals(arch) || "arm64ec".equals(arch);
+    }
+
     public boolean isX86_64() { return "x86_64".equals(arch); }
 
     public String identifier() {
@@ -91,6 +95,10 @@ public class WineInfo implements Parcelable {
     }
 
     @NonNull
+    public static WineInfo fromIdentifier(Context context, Object contentsManager, String identifier) {
+        return fromIdentifier(context, identifier);
+    }
+
     public static WineInfo fromIdentifier(Context context, String identifier) {
         if (identifier.equals(MAIN_WINE_INFO.identifier())) return MAIN_WINE_INFO;
         Matcher matcher = pattern.matcher(identifier);

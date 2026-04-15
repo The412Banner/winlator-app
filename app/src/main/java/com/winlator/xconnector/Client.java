@@ -2,7 +2,6 @@ package com.winlator.xconnector;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 
 public class Client {
     public final ClientSocket clientSocket;
@@ -25,10 +24,8 @@ public class Client {
 
     public void createIOStreams() {
         if (inputStream != null || outputStream != null) return;
-        inputStream = new XInputStream(clientSocket, connector.getInitialInputBufferCapacity());
-        outputStream = new XOutputStream(clientSocket, connector.getInitialOutputBufferCapacity());
-        inputStream.setByteOrder(ByteOrder.LITTLE_ENDIAN);
-        outputStream.setByteOrder(ByteOrder.LITTLE_ENDIAN);
+        inputStream = new XInputStream(clientSocket.fd, connector.getInitialInputBufferCapacity());
+        outputStream = new XOutputStream(clientSocket.fd, connector.getInitialOutputBufferCapacity());
     }
 
     public XInputStream getInputStream() {

@@ -37,6 +37,10 @@ public class StringUtils {
         return path.replaceAll("\\\\([^\\\\]+)", "$1").replaceAll("\\\\([^\\\\]+)", "$1").replaceAll("\\\\\\\\", "\\\\").trim();
     }
 
+    public static String unescape(String path) {
+        return unescapeDOSPath(path);
+    }
+
     public static String parseIdentifier(Object text) {
         return text.toString().toLowerCase(Locale.ENGLISH).replaceAll(" *\\(([^\\)]+)\\)$", "").replaceAll("( \\+ )+| +", "-");
     }

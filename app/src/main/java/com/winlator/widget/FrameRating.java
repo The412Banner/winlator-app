@@ -4,108 +4,89 @@ import android.app.ActivityManager;
 import android.content.Context;
 import android.os.SystemClock;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.FrameLayout;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.winlator.R;
-import com.winlator.box64.Box64Utils;
-import com.winlator.core.CPUStatus;
+
+import com.winlator.container.Container;
+import com.winlator.core.GPUInformation;
 import com.winlator.core.StringUtils;
 
 import java.util.Locale;
 
 public class FrameRating extends FrameLayout implements Runnable {
-    public enum Mode {DISABLED, SIMPLE, FULL}
+    private Context context;
     private long lastTime = 0;
-    private short frameCount = 0;
+    private int frameCount = 0;
     private float lastFPS = 0;
-    private final LinearLayout fpsPanel;
-    private final LinearLayout gpuPanel;
-    private final LinearLayout ramPanel;
-    private final LinearLayout cpuPanel;
-    private Mode mode = Mode.SIMPLE;
-    private ActivityManager activityManager;
-    private ActivityManager.MemoryInfo memoryInfo;
-    private String cpuInfo = null;
-    private byte tick = 0;
+    private String renderer = null;
+    private String gpuName = null;
+    private String totalRAM = null;
+    private final TextView tvFPS;
+    private final TextView tvRenderer;
+    private final TextView tvGPU;
+    private final TextView tvRAM;
 
-    public FrameRating(Context context) {
-        this(context, null);
+    public FrameRating(Context context, Container container) {
+        this(context, container, null);
     }
 
-    public FrameRating(Context context, AttributeSet attrs) {
-        this(context, attrs, 0);
+    public FrameRating(Context context, Container container, AttributeSet attrs) {
+        this(context, container, attrs, 0);
     }
 
-    public FrameRating(Context context, AttributeSet attrs, int defStyleAttr) {
+    public FrameRating(Context context, Container container, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-
+        this.context = context;
         View view = LayoutInflater.from(context).inflate(R.layout.frame_rating, this, false);
-        fpsPanel = view.findViewById(R.id.LLFPSPanel);
-        gpuPanel = view.findViewById(R.id.LLGPUPanel);
-        ramPanel = view.findViewById(R.id.LLRAMPanel);
-        cpuPanel = view.findViewById(R.id.LLCPUPanel);
+        tvFPS = view.findViewById(R.id.TVFPS);
+        tvRenderer = view.findViewById(R.id.TVRenderer);
+        tvGPU = view.findViewById(R.id.TVGPU);
+        tvRAM = view.findViewById(R.id.TVRAM);
+        totalRAM = getTotalRAM();
         addView(view);
-        setupPanels();
     }
-
-    private void setupPanels() {
-        switch (mode) {
-            case DISABLED:
-                fpsPanel.setVisibility(GONE);
-                gpuPanel.setVisibility(GONE);
-                ramPanel.setVisibility(GONE);
-                cpuPanel.setVisibility(GONE);
-                
-                activityManager = null;
-                memoryInfo = null;
-                break;
-            case SIMPLE:
-                fpsPanel.setVisibility(VISIBLE);
-                gpuPanel.setVisibility(GONE);
-                ramPanel.setVisibility(GONE);
-                cpuPanel.setVisibility(GONE);
-
-                activityManager = null;
-                memoryInfo = null;
-                break;
-            case FULL:
-                fpsPanel.setVisibility(VISIBLE);
-                gpuPanel.setVisibility(VISIBLE);
-                ramPanel.setVisibility(VISIBLE);
-                cpuPanel.setVisibility(VISIBLE);
-
-                Context context = getContext();
-                activityManager = (ActivityManager)context.getSystemService(Context.ACTIVITY_SERVICE);
-                memoryInfo = new ActivityManager.MemoryInfo();
-                break;
-        }
+    
+    private String getTotalRAM() {
+        String totalRAM = "";
+        ActivityManager activityManager = (ActivityManager)context.getSystemService(Context.ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
+        activityManager.getMemoryInfo(memoryInfo);
+        totalRAM = StringUtils.formatBytes(memoryInfo.totalMem);
+        return totalRAM;
     }
-
-    public Mode getMode() {
-        return mode;
+    
+    private String getAvailableRAM() {
+        String availableRAM = "";
+        ActivityManager activityManager = (ActivityManager)context.getSystemService(Context.ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
+        activityManager.getMemoryInfo(memoryInfo);
+        long usedMem = memoryInfo.totalMem - memoryInfo.availMem;
+        availableRAM = StringUtils.formatBytes(usedMem, false);
+        return availableRAM;
     }
-
-    public void setMode(Mode mode) {
-        this.mode = mode;
-        setupPanels();
-    }
-
-    public void setGPUInfo(String gpuInfo) {
-        post(() -> ((TextView)gpuPanel.getChildAt(1)).setText(gpuInfo));
-    }
-
+    
     public void reset() {
-        frameCount = 0;
-        lastTime = SystemClock.elapsedRealtime();
+        Log.d("FrameRating", "Resetting FrameRating");
+        renderer = null;
+        gpuName = null;
         lastFPS = 0;
-        tick = 2;
+    }
+
+    public void setRenderer(String renderer) {
+        this.renderer = renderer;
+    }
+
+    public void setGpuName (String gpuName) {
+        this.gpuName = gpuName;
     }
 
     public void update() {
+        if (lastTime == 0) lastTime = SystemClock.elapsedRealtime();
         long time = SystemClock.elapsedRealtime();
         if (time >= lastTime + 500) {
             lastFPS = ((float)(frameCount * 1000) / (time - lastTime));
@@ -113,30 +94,21 @@ public class FrameRating extends FrameLayout implements Runnable {
             lastTime = time;
             frameCount = 0;
         }
-
         frameCount++;
     }
 
     @Override
     public void run() {
         if (getVisibility() == GONE) setVisibility(View.VISIBLE);
-        ((TextView)fpsPanel.getChildAt(1)).setText(String.format(Locale.ENGLISH, "%.1f", lastFPS));
-
-        if (mode == Mode.FULL && ++tick >= 2) {
-            tick = 0;
-            activityManager.getMemoryInfo(memoryInfo);
-            long usedMem = memoryInfo.totalMem - memoryInfo.availMem;
-            String ramText = StringUtils.formatBytes(usedMem, false)+"/"+StringUtils.formatBytes(memoryInfo.totalMem);
-            ((TextView)ramPanel.getChildAt(1)).setText(ramText);
-
-            if (cpuInfo == null) {
-                cpuInfo = "Box64 v"+ Box64Utils.extractBinVersion(cpuPanel.getContext());
-            }
-
-            short[] clockSpeeds = CPUStatus.getCurrentClockSpeeds();
-            int maxClockSpeed = 0;
-            for (short clockSpeed : clockSpeeds) maxClockSpeed = Math.max(maxClockSpeed, clockSpeed);
-            ((TextView)cpuPanel.getChildAt(1)).setText(CPUStatus.formatClockSpeed(maxClockSpeed)+" | "+cpuInfo);
-        }
+        tvFPS.setText(String.format(Locale.ENGLISH, "%.1f", lastFPS));
+        if (renderer != null)
+            tvRenderer.setText(renderer);
+        else
+            tvRenderer.setText("OpenGL");
+        if (gpuName != null)
+            tvGPU.setText(gpuName);
+        else
+            tvGPU.setText(GPUInformation.getRenderer());
+        tvRAM.setText(getAvailableRAM() + " GB Used / " + totalRAM + " Total");
     }
 }

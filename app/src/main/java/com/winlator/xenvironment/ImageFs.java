@@ -26,7 +26,7 @@ public class ImageFs {
 
     private ImageFs(File rootDir) {
         this.rootDir = rootDir;
-        winePath = rootDir + "/opt/" + WineInfo.MAIN_WINE_VERSION.identifier();
+        winePath = rootDir + "/opt/" + WineInfo.MAIN_WINE_INFO.identifier();
         home_path = rootDir + HOME_PATH;
         cache_path = rootDir + CACHE_PATH;
         config_path = rootDir + CONFIG_PATH;

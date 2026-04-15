@@ -44,6 +44,10 @@ public class XServer {
     private final EnumMap<Lockable, ReentrantLock> locks = new EnumMap<>(Lockable.class);
     private boolean relativeMouseMovement = false;
 
+    public XServer(ScreenInfo screenInfo) {
+        this(null, screenInfo);
+    }
+
     public XServer(XServerDisplayActivity activity, ScreenInfo screenInfo) {
         this.activity = activity;
         this.screenInfo = screenInfo;

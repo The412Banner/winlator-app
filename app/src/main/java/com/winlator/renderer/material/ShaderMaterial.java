@@ -107,4 +107,19 @@ public abstract class ShaderMaterial {
         int location = getUniformLocation(uniform);
         if (location != -1) GLES20.glUniform2f(location, x, y);
     }
+
+    // String-name convenience overloads for coffincolors compatibility
+    public int getUniformLocation(String name) {
+        return programId != 0 ? GLES20.glGetUniformLocation(programId, name) : -1;
+    }
+
+    public void setUniformInt(String name, int value) {
+        int location = getUniformLocation(name);
+        if (location != -1) GLES20.glUniform1i(location, value);
+    }
+
+    public void setUniformVec2(String name, float x, float y) {
+        int location = getUniformLocation(name);
+        if (location != -1) GLES20.glUniform2f(location, x, y);
+    }
 }

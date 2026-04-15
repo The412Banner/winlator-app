@@ -29,9 +29,6 @@ import java.util.concurrent.atomic.AtomicLong;
 public abstract class TarCompressorUtils {
     public enum Type {XZ, ZSTD}
 
-    public interface OnExtractFileListener {
-        File onExtractFile(File destination, long size);
-    }
 
     private static void addFile(ArchiveOutputStream tar, File file, String entryName) {
         try {

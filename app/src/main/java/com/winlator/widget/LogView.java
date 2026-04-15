@@ -221,6 +221,16 @@ public class LogView extends View {
         if (MainActivity.DEBUG_MODE) System.out.println(line);
     }
 
+    private static String fileName = "logs";
+
+    public static void setFilename(String file) {
+        if (file != null && file.contains(".")) {
+            fileName = file.substring(0, file.lastIndexOf("."));
+        } else if (file != null) {
+            fileName = file;
+        }
+    }
+
     public static File getLogFile() {
         File parent = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "Winlator");
         if (!parent.isDirectory()) parent.mkdirs();

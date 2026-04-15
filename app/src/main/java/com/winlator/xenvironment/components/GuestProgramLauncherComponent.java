@@ -38,6 +38,8 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     private String fexcorePreset = "default";
     private WineInfo wineInfo;
     private Callback<Integer> terminationCallback;
+    private boolean wow64Mode = false;
+    private String[] bindingPaths;
     private static final Object lock = new Object();
 
     @Override
@@ -74,6 +76,10 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     public void setFexcorePreset(String fexcorePreset) { this.fexcorePreset = fexcorePreset; }
     public WineInfo getWineInfo() { return wineInfo; }
     public void setWineInfo(WineInfo wineInfo) { this.wineInfo = wineInfo; }
+    public boolean isWoW64Mode() { return wow64Mode; }
+    public void setWoW64Mode(boolean wow64Mode) { this.wow64Mode = wow64Mode; }
+    public String[] getBindingPaths() { return bindingPaths; }
+    public void setBindingPaths(String[] bindingPaths) { this.bindingPaths = bindingPaths; }
 
     private int execGuestProgram() {
         Context context = environment.getContext();

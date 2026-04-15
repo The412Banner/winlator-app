@@ -6,14 +6,16 @@ class RenderableWindow {
     final Drawable content;
     short rootX;
     short rootY;
-    final boolean transparent;
-    final FullscreenTransformation fullscreenTransformation;
+    boolean forceFullscreen;
 
-    public RenderableWindow(Drawable content, int rootX, int rootY, boolean transparent, FullscreenTransformation fullscreenTransformation) {
+    public RenderableWindow(Drawable content, int rootX, int rootY) {
+        this(content, rootX, rootY, false);
+    }
+
+    public RenderableWindow(Drawable content, int rootX, int rootY, boolean forceFullscreen) {
         this.content = content;
         this.rootX = (short)rootX;
         this.rootY = (short)rootY;
-        this.transparent = transparent;
-        this.fullscreenTransformation = fullscreenTransformation;
+        this.forceFullscreen = forceFullscreen;
     }
 }

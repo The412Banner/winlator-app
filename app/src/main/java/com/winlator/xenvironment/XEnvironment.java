@@ -37,6 +37,14 @@ public class XEnvironment implements Iterable<EnvironmentComponent> {
         return imageFs;
     }
 
+    public RootFS getRootFS() {
+        RootFS rootFS = RootFS.find(context);
+        if (imageFs != null && imageFs.winePath != null) {
+            rootFS.setWinePath(imageFs.winePath);
+        }
+        return rootFS;
+    }
+
     public void addComponent(EnvironmentComponent environmentComponent) {
         environmentComponent.environment = this;
         components.add(environmentComponent);

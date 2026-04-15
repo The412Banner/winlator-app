@@ -194,6 +194,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private float globalCursorSpeed = 1.0f;
     private MagnifierView magnifierView;
     private DebugDialog debugDialog;
+    public DebugDialog getDebugDialog() { return debugDialog; }
+    public SharedPreferences getPreferences() { return getPreferences(MODE_PRIVATE); }
     private short taskAffinityMask = 0;
     private short taskAffinityMaskWoW64 = 0;
     private int frameRatingWindowId = -1;

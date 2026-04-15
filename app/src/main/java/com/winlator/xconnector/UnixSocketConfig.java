@@ -30,4 +30,8 @@ public class UnixSocketConfig {
 
         return new UnixSocketConfig(socketFile.getPath());
     }
+
+    public static UnixSocketConfig createSocket(String rootPath, String relativePath) {
+        return create(rootPath, relativePath);
+    }
 }

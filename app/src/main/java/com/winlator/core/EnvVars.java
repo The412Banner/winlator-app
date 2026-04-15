@@ -64,6 +64,10 @@ public class EnvVars implements Iterable<String> {
         return String.join(" ", toStringArray());
     }
 
+    public String print() {
+        return toString();
+    }
+
     public String toEscapedString() {
         String result = "";
         for (String key : data.keySet()) {

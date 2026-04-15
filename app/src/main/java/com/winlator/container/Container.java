@@ -62,7 +62,7 @@ public class Container {
     private String wincomponents = DEFAULT_WINCOMPONENTS;
     private String audioDriver = DEFAULT_AUDIO_DRIVER;
     private String drives = DEFAULT_DRIVES;
-    private String wineVersion = WineInfo.MAIN_WINE_VERSION.identifier();
+    private String wineVersion = WineInfo.MAIN_WINE_INFO.identifier();
     private boolean showFPS;
     private boolean fullscreenStretched;
     private boolean wow64Mode = true;
@@ -464,7 +464,7 @@ public class Container {
 
 
     public void loadData(JSONObject data) throws JSONException {
-        wineVersion = WineInfo.MAIN_WINE_VERSION.identifier();
+        wineVersion = WineInfo.MAIN_WINE_INFO.identifier();
         dxwrapperConfig = "";
         checkObsoleteOrMissingProperties(data);
 
