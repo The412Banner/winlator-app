@@ -24,9 +24,17 @@ jobs:
 
     - name: Fix duplicate .so conflict
       run: |
-        sed -i '/packagingOptions {/,/}/{ /jniLibs {/,/}/{ /useLegacyPackaging/a\            pickFirst "**/*.so"
-        } }' app/build.gradle || \
-        sed -i 's/packagingOptions {/packagingOptions {\n        pickFirst "**\/*.so"/' app/build.gradle
+        python3 - <<'EOF'
+        import re
+        with open("app/build.gradle", "r") as f:
+            content = f.read()
+        insert = '\n    packagingOptions {\n        pickFirst "**/*.so"\n    }\n'
+        # Insert before the closing brace of the android { } block
+        content = re.sub(r'(^})', insert + r'\1', content, count=1, flags=re.MULTILINE)
+        with open("app/build.gradle", "w") as f:
+            f.write(content)
+        print("packagingOptions inserted")
+        EOF
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
