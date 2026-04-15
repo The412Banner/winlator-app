@@ -297,4 +297,11 @@
         <item name="android:background">@drawable/right_side_button</item>
         <item name="android:padding">6dp</item>
     </style>
+    <!-- Fullscreen themes for coffincolors activities -->
+    <style name="AppThemeFullscreen" parent="@style/AppTheme">
+        <item name="android:windowFullscreen">true</item>
+    </style>
+    <style name="AppThemeFullscreen.Dark" parent="@style/AppTheme.Dark">
+        <item name="android:windowFullscreen">true</item>
+    </style>
 </resources>
