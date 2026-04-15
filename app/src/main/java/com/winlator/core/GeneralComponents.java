@@ -206,7 +206,7 @@ public abstract class GeneralComponents {
         extractFile(type, context, identifier, defaultVersion, null);
     }
 
-    public static void extractFile(Type type, Context context, String identifier, String defaultVersion, TarCompressorUtils.OnExtractFileListener onExtractFileListener) {
+    public static void extractFile(Type type, Context context, String identifier, String defaultVersion, OnExtractFileListener onExtractFileListener) {
         File destination = type.getDestination(context);
 
         if (isBuiltinComponent(type, identifier)) {
