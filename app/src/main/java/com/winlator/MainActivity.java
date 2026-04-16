@@ -51,6 +51,7 @@ import com.winlator.inputcontrols.ControllerManager;
 import com.winlator.saves.Save;
 import com.winlator.saves.SaveManager;
 import com.winlator.xenvironment.ImageFsInstaller;
+import com.winlator.xenvironment.RootFSInstaller;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -155,7 +156,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             // onCreate(), replace the two blocks with this single block
             boolean waitingForPerms = requestAppPermissions();
             if (!waitingForPerms) {
-                ImageFsInstaller.installIfNeeded(this, () ->
+                RootFSInstaller.installIfNeeded(this, () ->
                         checkForAndInstallAssetContents(() -> {
                             if (!allAccessFilesDialogDismissed
                                     && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
@@ -353,7 +354,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_WRITE_EXTERNAL_STORAGE_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                ImageFsInstaller.installIfNeeded(this, () -> {
+                RootFSInstaller.installIfNeeded(this, () -> {
                     if (!allAccessFilesDialogDismissed
                             && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
                             && !Environment.isExternalStorageManager()) {
