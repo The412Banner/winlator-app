@@ -18,6 +18,7 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -65,6 +66,47 @@ public abstract class TarCompressorUtils {
                 addDirectory(tar, file, entryName);
             }
             else addFile(tar, file, basePath+file.getName());
+        }
+    }
+
+    private static void addDirectoryFiltered(ArchiveOutputStream tar, File folder, String basePath, FileFilter filter) throws IOException {
+        File[] files = folder.listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            if (filter != null && !filter.accept(file)) continue;
+            if (FileUtils.isSymlink(file)) {
+                addLinkFile(tar, file, basePath + file.getName());
+            } else if (file.isDirectory()) {
+                String entryName = basePath + file.getName() + "/";
+                tar.putArchiveEntry(tar.createArchiveEntry(folder, entryName));
+                tar.closeArchiveEntry();
+                addDirectoryFiltered(tar, file, entryName, filter);
+            } else {
+                addFile(tar, file, basePath + file.getName());
+            }
+        }
+    }
+
+    public static void archive(File[] files, File destination, FileFilter filter) {
+        try (OutputStream outStream = getCompressorOutputStream(Type.XZ, destination, 3);
+             TarArchiveOutputStream tar = new TarArchiveOutputStream(outStream)) {
+            tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_GNU);
+            for (File file : files) {
+                if (filter != null && !filter.accept(file)) continue;
+                if (FileUtils.isSymlink(file)) {
+                    addLinkFile(tar, file, file.getName());
+                } else if (file.isDirectory()) {
+                    String basePath = file.getName() + "/";
+                    tar.putArchiveEntry(tar.createArchiveEntry(file, basePath));
+                    tar.closeArchiveEntry();
+                    addDirectoryFiltered(tar, file, basePath, filter);
+                } else {
+                    addFile(tar, file, file.getName());
+                }
+            }
+            tar.finish();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
@@ -137,6 +179,10 @@ public abstract class TarCompressorUtils {
     }
 
     public static boolean extract(Type type, File source, File destination) {
+        return extract(type, source, destination, null);
+    }
+
+    public static boolean extract(Type type, InputStream source, File destination) {
         return extract(type, source, destination, null);
     }
 

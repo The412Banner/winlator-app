@@ -271,4 +271,8 @@ public class ALSAClient {
             framesPerBuffer = 256;
         }
     }
+
+    public void onAudioDeviceChanged() {
+        // No-op stub — subclasses can override
+    }
 }

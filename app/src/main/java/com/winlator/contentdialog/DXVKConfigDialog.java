@@ -35,6 +35,10 @@ public class DXVKConfigDialog extends ContentDialog {
     private final Context context;
     private List<String> dxvkVersions;
 
+    public DXVKConfigDialog(String graphicsDriver, View anchor) {
+        this(anchor);
+    }
+
     public DXVKConfigDialog(View anchor) {
         super(anchor.getContext(), R.layout.dxvk_config_dialog);
         context = anchor.getContext();

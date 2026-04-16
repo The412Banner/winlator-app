@@ -391,6 +391,16 @@ public class ContainerManager {
         new Handler(Looper.getMainLooper()).post(action);
     }
 
-
-
+    public java.util.ArrayList<FileInfo> loadFiles(Container container, FileInfo parent) {
+        if (parent == null) {
+            // Return root-level drives: C: and configured drives
+            java.util.ArrayList<FileInfo> roots = new java.util.ArrayList<>();
+            roots.add(new FileInfo(container, "C:", container.getRootDir().getAbsolutePath() + "/.wine/drive_c", FileInfo.Type.DRIVE));
+            for (String[] drive : container.drivesIterator()) {
+                roots.add(new FileInfo(container, drive[0] + ":", drive[1], FileInfo.Type.DRIVE));
+            }
+            return roots;
+        }
+        return parent.list();
+    }
 }

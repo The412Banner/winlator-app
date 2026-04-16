@@ -124,6 +124,18 @@ public class Texture {
         return textureId;
     }
 
+    public void copyFromFramebuffer(int framebufferId, int width, int height) {
+        if (!isAllocated()) allocateTexture((short)width, (short)height, null);
+        int[] prevFbo = new int[1];
+        android.opengl.GLES30.glGetIntegerv(android.opengl.GLES30.GL_FRAMEBUFFER_BINDING, prevFbo, 0);
+        android.opengl.GLES30.glBindFramebuffer(android.opengl.GLES30.GL_READ_FRAMEBUFFER, framebufferId);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId);
+        GLES20.glCopyTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, 0, 0, width, height, 0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+        android.opengl.GLES30.glBindFramebuffer(android.opengl.GLES30.GL_READ_FRAMEBUFFER, prevFbo[0]);
+        GLES20.glFlush();
+    }
+
     public void copyFromReadBuffer(short width, short height) {
         if (!isAllocated()) allocateTexture(width, height, null);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId);

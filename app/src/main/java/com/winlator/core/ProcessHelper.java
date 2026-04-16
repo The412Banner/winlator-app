@@ -90,6 +90,10 @@ public abstract class ProcessHelper {
         return exec(command, envp, workingDir, null);
     }
 
+    public static int exec(String command, EnvVars envVars, File workingDir) {
+        return exec(command, envVars != null ? envVars.toStringArray() : null, workingDir, null);
+    }
+
     public static int exec(String command, String[] envp, File workingDir, Callback<Integer> terminationCallback) {
         Log.d("ProcessHelper", "env: " + Arrays.toString(envp) + "\ncmd: " + command);
 

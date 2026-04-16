@@ -19,7 +19,7 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-public class ExternalController {
+public class ExternalController implements GamepadSlot {
     public static final byte IDX_BUTTON_A = 0;
     public static final byte IDX_BUTTON_B = 1;
     public static final byte IDX_BUTTON_X = 2;
@@ -59,6 +59,16 @@ public class ExternalController {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    @Override
+    public GamepadState getGamepadState() {
+        return state;
+    }
+
+    @Override
+    public GamepadVibration getGamepadVibration() {
+        return null;
     }
 
     public String getId() {

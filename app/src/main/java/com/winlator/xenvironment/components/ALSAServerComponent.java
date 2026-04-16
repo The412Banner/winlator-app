@@ -1,30 +1,34 @@
 package com.winlator.xenvironment.components;
 
-import android.util.SparseArray;
-
 import com.winlator.alsaserver.ALSAClient;
 import com.winlator.alsaserver.ALSAClientConnectionHandler;
 import com.winlator.alsaserver.ALSARequestHandler;
-import com.winlator.xconnector.Client;
+import com.winlator.xconnector.ConnectedClient;
 import com.winlator.xconnector.UnixSocketConfig;
 import com.winlator.xconnector.XConnectorEpoll;
 import com.winlator.xenvironment.EnvironmentComponent;
 
+import java.util.List;
+
 public class ALSAServerComponent extends EnvironmentComponent {
     private XConnectorEpoll connector;
     private final UnixSocketConfig socketConfig;
-
-    private final boolean reflectorMode;
+    private final ALSAClient.Options options;
 
     public ALSAServerComponent(UnixSocketConfig socketConfig, boolean reflectorMode) {
         this.socketConfig = socketConfig;
-        this.reflectorMode = reflectorMode; // Store it
+        this.options = new ALSAClient.Options();
+    }
+
+    public ALSAServerComponent(UnixSocketConfig socketConfig, ALSAClient.Options options) {
+        this.socketConfig = socketConfig;
+        this.options = options != null ? options : new ALSAClient.Options();
     }
 
     @Override
     public void start() {
         if (connector != null) return;
-        ALSAClientConnectionHandler connectionHandler = new ALSAClientConnectionHandler(reflectorMode);
+        ALSAClientConnectionHandler connectionHandler = new ALSAClientConnectionHandler(options);
         connector = new XConnectorEpoll(socketConfig, connectionHandler, new ALSARequestHandler());
         connector.setMultithreadedClients(true);
         connector.start();
@@ -38,25 +42,14 @@ public class ALSAServerComponent extends EnvironmentComponent {
         }
     }
 
-    /**
-     * This method is called from the Activity when an audio device change is detected.
-     * It iterates through all active ALSA connections and notifies them.
-     */
     public void notifyAudioDeviceChanged() {
-        if (connector == null) {
-            return;
-        }
-
-        // Use the new getter to access the list of clients
-        SparseArray<Client> clients = connector.getConnectedClients();
-        for (int i = 0; i < clients.size(); i++) {
-            Client client = clients.valueAt(i);
+        if (connector == null) return;
+        List<ConnectedClient> clients = connector.getClients();
+        for (ConnectedClient client : clients) {
             Object tag = client.getTag();
-            // Check if the client's tag is an ALSAClient instance
             if (tag instanceof ALSAClient) {
                 ((ALSAClient) tag).onAudioDeviceChanged();
             }
         }
     }
 }
-

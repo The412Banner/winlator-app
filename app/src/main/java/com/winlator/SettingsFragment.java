@@ -686,6 +686,11 @@ public class SettingsFragment extends Fragment {
         editor.apply();
     }
 
+    public static void resetBox64Version(android.content.Context context) {
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .remove("current_box64_version").apply();
+    }
+
 
 
     private void showBackupConfirmationDialog() {

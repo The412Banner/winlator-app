@@ -41,6 +41,17 @@ import java.util.TimerTask;
 public abstract class AppUtils {
     private static WeakReference<Toast> globalToastReference = null;
 
+    public static void setActivityTheme(Activity activity) {
+        // Apply dark/light theme based on shared preferences
+        boolean darkMode = androidx.preference.PreferenceManager.getDefaultSharedPreferences(activity)
+                .getBoolean("dark_mode", false);
+        if (darkMode) {
+            activity.setTheme(com.winlator.R.style.AppTheme_Dark);
+        } else {
+            activity.setTheme(com.winlator.R.style.AppTheme);
+        }
+    }
+
     public static void keepScreenOn(Activity activity) {
         activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }

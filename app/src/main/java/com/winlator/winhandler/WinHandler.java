@@ -60,8 +60,8 @@ public class WinHandler {
 
     private DatagramSocket socket;
     private InetAddress localhost;
-    private final ByteBuffer sendData = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN);
-    private final ByteBuffer receiveData = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN);
+    final ByteBuffer sendData = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN);
+    final ByteBuffer receiveData = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN);
     private final DatagramPacket sendPacket = new DatagramPacket(sendData.array(), 64);
     private final DatagramPacket receivePacket = new DatagramPacket(receiveData.array(), 64);
 
@@ -1000,6 +1000,18 @@ public class WinHandler {
         }
     }
 
+    boolean sendPacket(int port, int length) {
+        try {
+            int size = length > 0 ? length : sendData.position();
+            if (size == 0) return false;
+            DatagramPacket p = new DatagramPacket(sendData.array(), 0, size, localhost, port);
+            socket.send(p);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     boolean sendPacket(int port, byte[] data) {
         try {
             DatagramPacket p = new DatagramPacket(data, data.length, localhost, port);
@@ -1065,11 +1077,15 @@ public class WinHandler {
         addAction(() -> {
             sendData.rewind();
             sendData.put(RequestCodes.KILL_PROCESS);
-            byte[] bytes = processName.getBytes();
+            byte[] bytes = processName != null ? processName.getBytes() : new byte[0];
             sendData.putInt(bytes.length);
-            sendData.put(bytes);
+            if (bytes.length > 0) sendData.put(bytes);
             sendPacket(CLIENT_PORT);
         });
+    }
+
+    public void killProcess(final String processName, final int pid) {
+        killProcess(processName);
     }
 
     public void listProcesses() {

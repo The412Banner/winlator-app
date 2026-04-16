@@ -319,6 +319,13 @@ public abstract class FileUtils {
         return getName(path).replaceFirst("\\.[^\\.]+$", "");
     }
 
+    public static String getExtension(String path) {
+        if (path == null) return "";
+        String name = getName(path);
+        int dot = name.lastIndexOf('.');
+        return dot >= 0 ? name.substring(dot + 1).toLowerCase(java.util.Locale.ENGLISH) : "";
+    }
+
     public static String getDirname(String path) {
         if (path == null) return "";
         path = StringUtils.removeEndSlash(path);

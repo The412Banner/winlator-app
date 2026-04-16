@@ -353,6 +353,10 @@ public class Container {
         return new File(rootDir, ".wine/drive_c/users/"+ImageFs.USER+"/Desktop/");
     }
 
+    public File getUserDir() {
+        return new File(rootDir, ".wine/drive_c/users/"+ImageFs.USER);
+    }
+
     public File getDesktopDirXuser() {
         return new File(rootDir, ".wine/drive_c/users/xuser/Desktop/");
     }

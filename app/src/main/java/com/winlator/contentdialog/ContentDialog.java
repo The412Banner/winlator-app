@@ -211,6 +211,31 @@ public class ContentDialog extends Dialog {
         dialog.show();
     }
 
+    public static void showMultipleChoiceList(Context context, int titleResId, final String[] items, Callback<int[]> callback) {
+        ContentDialog dialog = new ContentDialog(context);
+
+        final ListView listView = dialog.findViewById(R.id.ListView);
+        listView.getLayoutParams().width = AppUtils.getPreferredDialogWidth(context);
+        listView.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);
+        listView.setAdapter(new ArrayAdapter<>(context, R.layout.simple_list_item_multiple_choice, items));
+        listView.setVisibility(View.VISIBLE);
+
+        dialog.setTitle(context.getString(titleResId));
+        dialog.setOnConfirmCallback(() -> {
+            SparseBooleanArray checked = listView.getCheckedItemPositions();
+            int count = 0;
+            for (int i = 0; i < checked.size(); i++) { if (checked.valueAt(i)) count++; }
+            int[] result = new int[count];
+            int idx = 0;
+            for (int i = 0; i < checked.size(); i++) {
+                if (checked.valueAt(i)) result[idx++] = checked.keyAt(i);
+            }
+            callback.call(result);
+        });
+
+        dialog.show();
+    }
+
     public void setOnControllerInputListener(OnControllerInputListener listener) {
         this.onControllerInputListener = listener;
     }
