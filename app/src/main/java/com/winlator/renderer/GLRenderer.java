@@ -25,6 +25,8 @@ import com.winlator.xserver.WindowManager;
 import com.winlator.xserver.XLock;
 import com.winlator.xserver.XServer;
 
+import com.winlator.core.Callback;
+
 import java.util.ArrayList;
 
 import javax.microedition.khronos.egl.EGLConfig;
@@ -504,5 +506,16 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
         }
     }
 
+    public void takeWindowScreenshot(Drawable drawable, Callback<android.graphics.Bitmap> callback) {
+        if (drawable == null || callback == null) return;
+        xServerView.queueEvent(() -> {
+            try {
+                android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(drawable.width, drawable.height, android.graphics.Bitmap.Config.ARGB_8888);
+                callback.call(bitmap);
+            } catch (Exception e) {
+                callback.call(null);
+            }
+        });
+    }
 
 }

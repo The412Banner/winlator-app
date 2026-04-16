@@ -208,4 +208,14 @@ public class XServer {
         DebugDialog debugDialog = activity.getDebugDialog();
         if (debugDialog != null) debugDialog.call("xserver:"+line);
     }
+
+    private boolean simulateTouchScreen = false;
+
+    public void setSimulateTouchScreen(boolean simulateTouchScreen) {
+        this.simulateTouchScreen = simulateTouchScreen;
+    }
+
+    public boolean isSimulateTouchScreen() {
+        return simulateTouchScreen;
+    }
 }

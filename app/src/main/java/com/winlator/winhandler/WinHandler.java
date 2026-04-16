@@ -1359,4 +1359,15 @@ public class WinHandler {
         return p != null && p.isVirtualGamepad();
     }
 
+    private MIDIHandler midiHandler;
+
+    public MIDIHandler getMIDIhandler() {
+        if (midiHandler == null) midiHandler = new MIDIHandler(activity);
+        return midiHandler;
+    }
+
+    public void showDesktop() {
+        // Stub for desktop show (minimize all windows)
+    }
+
 }

@@ -381,6 +381,12 @@ public abstract class FileUtils {
         return filePath;
     }
 
+    public static String getFilePathFromUri(Uri uri) {
+        if (uri == null) return null;
+        String path = uri.getPath();
+        return path;
+    }
+
 
     public static boolean contentEquals(File origin, File target) {
         if (origin.length() != target.length()) return false;

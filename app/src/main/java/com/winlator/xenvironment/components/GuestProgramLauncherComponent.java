@@ -228,6 +228,18 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         envVars.put("BOX64_RCFILE", box64RCFile.getPath());
     }
 
+    public void suspendProcess() {
+        onPause();
+    }
+
+    public void resumeProcess() {
+        onResume();
+    }
+
+    public String execShellCommand(String command) {
+        return "";
+    }
+
     @Override
     public void onPause() {
         synchronized (lock) {

@@ -363,6 +363,22 @@ public class InputControlsView extends View {
         return colorFilter;
     }
 
+    public ColorFilter getLightColorFilter() {
+        return colorFilter;
+    }
+
+    public ColorFilter getDarkColorFilter() {
+        return new PorterDuffColorFilter(0xff000000, PorterDuff.Mode.SRC_IN);
+    }
+
+    public boolean isEditMode() {
+        return editMode;
+    }
+
+    public float getOverlayOpacity() {
+        return overlayOpacity;
+    }
+
     public TouchpadView getTouchpadView() {
         return touchpadView;
     }

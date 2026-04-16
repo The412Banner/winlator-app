@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ShortcutSettingsDialog missing IDs -->
+    <item name="SGraphicsDriver" type="id"/>
+    <item name="SDXWrapper" type="id"/>
+    <item name="SDDrawrapper" type="id"/>
+    <item name="SBox64Version" type="id"/>
+    <item name="BTGraphicsDriverConfig" type="id"/>
+    <item name="BTDXWrapperConfig" type="id"/>
+    <item name="SEmulator" type="id"/>
+    <item name="SEmulator64" type="id"/>
+    <item name="SMIDISoundFont" type="id"/>
+    <item name="fexcoreFrame" type="id"/>
+    <item name="CBUseSecondaryExec" type="id"/>
+    <item name="LLSecondaryExecOptions" type="id"/>
+    <item name="ETSecondaryExec" type="id"/>
+    <item name="ETExecDelay" type="id"/>
+    <item name="CBFullscreenStretched" type="id"/>
+    <item name="SFEXCoreVersion" type="id"/>
+    <item name="SFEXCoreTSOPreset" type="id"/>
+    <item name="SFEXCoreMultiblock" type="id"/>
+    <item name="SFEXCoreX87ReducedPrecision" type="id"/>
+    <item name="CBDisabledXInput" type="id"/>
+    <item name="CBGStreamerWorkaroundToggle" type="id"/>
+    <item name="CBTouchscreenMode" type="id"/>
+    <item name="SSharpnessEffect" type="id"/>
+    <item name="SBSharpnessLevel" type="id"/>
+    <item name="SBSharpnessDenoise" type="id"/>
+    <item name="TVSharpnessLevel" type="id"/>
+    <item name="TVSharpnessDenoise" type="id"/>
+    <item name="SStartupSelection" type="id"/>
+    <!-- XServerDisplayActivity input_controls_dialog missing IDs -->
+    <item name="CBSimulateTouchScreen" type="id"/>
+    <item name="CBEnableTimeout" type="id"/>
+    <item name="CBEnableHaptics" type="id"/>
+    <item name="CBDisableTouchscreenMouse" type="id"/>
+    <!-- ScreenEffectDialog missing IDs -->
+    <item name="LBLColorAdjustment" type="id"/>
+    <item name="CBEnableToonShader" type="id"/>
+    <item name="CBEnableNTSCEffect" type="id"/>
+    <!-- XrActivity layout ID -->
+    <item name="XRTextInput" type="id"/>
+    <!-- FrameRating IDs -->
+    <item name="TVFPS" type="id"/>
+    <item name="TVRenderer" type="id"/>
+    <item name="TVGPU" type="id"/>
+    <item name="TVRAM" type="id"/>
+</resources>

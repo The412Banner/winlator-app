@@ -76,6 +76,14 @@ public abstract class TarCompressorUtils {
         compress(type, new File[]{file}, destination, level);
     }
 
+    public static void compress(Type type, File file, File destination, int level, OnExtractFileListener ignored) {
+        compress(type, file, destination, level);
+    }
+
+    public static boolean extractTar(File source, File destination, OnExtractFileListener onExtractFileListener) {
+        return extract(Type.ZSTD, source, destination, onExtractFileListener);
+    }
+
     public static void compress(Type type, File[] files, File destination, int level) {
         try (OutputStream outStream = getCompressorOutputStream(type, destination, level);
              TarArchiveOutputStream tar = new TarArchiveOutputStream(outStream)) {

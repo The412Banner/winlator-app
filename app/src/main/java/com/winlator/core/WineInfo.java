@@ -57,6 +57,8 @@ public class WineInfo implements Parcelable {
 
     public boolean isX86_64() { return "x86_64".equals(arch); }
 
+    public String getArch() { return arch; }
+
     public String identifier() {
         return "wine-"+fullVersion()+(this == MAIN_WINE_INFO ? "-custom" : "");
     }

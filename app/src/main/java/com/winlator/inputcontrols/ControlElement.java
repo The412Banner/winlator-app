@@ -289,6 +289,16 @@ public class ControlElement {
         return boundingBox;
     }
 
+    public void setCurrentPosition(float x, float y) {
+        if (currentPosition == null) currentPosition = new PointF();
+        currentPosition.set(x, y);
+    }
+
+    public PointF getCurrentPosition() {
+        if (currentPosition == null) currentPosition = new PointF();
+        return currentPosition;
+    }
+
     private Rect computeBoundingBox() {
         int snappingSize = inputControlsView.getSnappingSize();
         int halfWidth = 0;
@@ -969,6 +979,10 @@ public class ControlElement {
             return true;
         }
         else return false;
+    }
+
+    public boolean handleTouchUp(int pointerId) {
+        return handleTouchUp(pointerId, 0, 0);
     }
 
     public boolean handleTouchUp(int pointerId, float x, float y) {

@@ -282,6 +282,19 @@ public abstract class AppUtils {
         return false;
     }
 
+    public static boolean setSpinnerSelectionFromMemorySize(Spinner spinner, String memorySize) {
+        if (memorySize == null || memorySize.isEmpty()) return false;
+        spinner.setSelection(0, false);
+        for (int i = 0; i < spinner.getCount(); i++) {
+            String item = spinner.getItemAtPosition(i).toString();
+            if (item.equalsIgnoreCase(memorySize)) {
+                spinner.setSelection(i, false);
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static void setupTabLayout(final View view, int tabLayoutResId, final int... tabResIds) {
         final Callback<Integer> tabSelectedCallback = (position) -> {
             for (int i = 0; i < tabResIds.length; i++) {

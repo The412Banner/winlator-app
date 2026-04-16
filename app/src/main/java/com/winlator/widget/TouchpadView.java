@@ -696,6 +696,19 @@ public class TouchpadView extends View {
         xServer.setSimulateTouchScreen(this.simTouchScreen);
     }
 
+    public void setSimulateTouchScreen(boolean simTouchScreen) {
+        setSimTouchScreen(simTouchScreen);
+    }
+
+    public void mouseMove(float x, float y, int action) {
+        if (xServer == null) return;
+        WinHandler winHandler = xServer.getWinHandler();
+        if (winHandler == null) return;
+        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE) {
+            winHandler.mouseEvent(MouseEventFlags.MOVE, (int)x, (int)y, 0);
+        }
+    }
+
     public boolean isSimTouchScreen() {
         return simTouchScreen;
     }

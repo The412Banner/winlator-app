@@ -118,8 +118,18 @@ public abstract class ShaderMaterial {
         if (location != -1) GLES20.glUniform1i(location, value);
     }
 
+    public void setUniformFloat(String name, float value) {
+        int location = getUniformLocation(name);
+        if (location != -1) GLES20.glUniform1f(location, value);
+    }
+
     public void setUniformVec2(String name, float x, float y) {
         int location = getUniformLocation(name);
         if (location != -1) GLES20.glUniform2f(location, x, y);
+    }
+
+    // setUniformNames is a no-op hint for naming uniforms (lookups are done by name at runtime)
+    public void setUniformNames(String... names) {
+        // No-op: uniforms are looked up by name via getUniformLocation(String)
     }
 }
