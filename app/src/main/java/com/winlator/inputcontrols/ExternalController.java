@@ -614,6 +614,11 @@ public class ExternalController implements GamepadSlot {
         return null;
     }
 
+    public static void updateConnectedControllers(ArrayList<ExternalController> connectedControllers) {
+        connectedControllers.clear();
+        connectedControllers.addAll(getControllers());
+    }
+
     public static ExternalController getController(int deviceId) {
         int[] deviceIds = InputDevice.getDeviceIds();
         for (int i = deviceIds.length-1; i >= 0; i--) {

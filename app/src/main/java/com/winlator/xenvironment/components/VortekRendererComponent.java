@@ -25,6 +25,7 @@ import java.util.Objects;
 /* JADX INFO: loaded from: classes.dex */
 public class VortekRendererComponent extends EnvironmentComponent implements ConnectionHandler, RequestHandler {
     public static final int VK_MAX_VERSION = GPUHelper.vkMakeVersion(1, 3, 128);
+    public static final int IMAGE_CACHE_SIZE = 50;
     private XConnectorEpoll connector;
     private final Options options;
     private final UnixSocketConfig socketConfig;
