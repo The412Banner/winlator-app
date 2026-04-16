@@ -2,7 +2,7 @@
 <resources>
 
     <!-- Light Theme -->
-    <style name="AppTheme" parent="@style/Theme.AppCompat.Light.NoActionBar">
+    <style name="AppTheme" parent="@style/Theme.MaterialComponents.Light.NoActionBar.Bridge">
         <item name="colorAccent">@color/colorAccent</item>
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
@@ -19,7 +19,7 @@
     </style>
 
     <!-- Dark Theme -->
-    <style name="AppTheme.Dark" parent="@style/Theme.AppCompat.NoActionBar">
+    <style name="AppTheme.Dark" parent="@style/Theme.MaterialComponents.NoActionBar.Bridge">
         <item name="colorAccent">@color/colorAccentDark</item>
         <item name="colorPrimary">@color/colorPrimaryDarkMode</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDarkModeDark</item>
