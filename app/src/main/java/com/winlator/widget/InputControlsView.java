@@ -703,6 +703,20 @@ public class InputControlsView extends View {
         handleInputEvent(binding, isActionDown, 0);
     }
 
+    public void handleInputEvent(com.winlator.inputcontrols.Binding[] bindings, boolean isActionDown) {
+        if (bindings == null) return;
+        for (com.winlator.inputcontrols.Binding binding : bindings) {
+            if (binding != null && binding != com.winlator.inputcontrols.Binding.NONE) {
+                handleInputEvent(binding, isActionDown, 0);
+            }
+        }
+    }
+
+    public void handleInputEvent(com.winlator.inputcontrols.Binding binding, boolean isActionDown, com.winlator.inputcontrols.Binding[] extraBindings) {
+        handleInputEvent(binding, isActionDown, 0);
+        if (extraBindings != null) handleInputEvent(extraBindings, isActionDown);
+    }
+
     public void handleInputEvent(Binding binding, boolean isActionDown, float offset) {
         WinHandler winHandler = xServer != null ? xServer.getWinHandler() : null;
         if (binding.isGamepad()) {

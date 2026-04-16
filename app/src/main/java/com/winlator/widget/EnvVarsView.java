@@ -162,4 +162,8 @@ public class EnvVarsView extends FrameLayout {
         container.removeAllViews();
         for (String name : envVars) add(name, envVars.get(name));
     }
+
+    public void setDarkMode(boolean darkMode) {
+        // No-op stub — dark mode styling handled by theme
+    }
 }

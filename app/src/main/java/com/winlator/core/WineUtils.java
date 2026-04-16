@@ -205,6 +205,40 @@ public abstract class WineUtils {
         }
     }
 
+    public static String unixToDOSPath(String unixPath, Container container) {
+        if (unixPath == null) return "";
+        java.io.File rootDir = container.getRootDir();
+        String driveC = rootDir.getAbsolutePath() + "/.wine/drive_c";
+        if (unixPath.startsWith(driveC)) {
+            return "C:" + unixPath.substring(driveC.length()).replace('/', '\\');
+        }
+        // Check other drives
+        for (String[] drive : container.drivesIterator()) {
+            String drivePath = drive[1];
+            if (unixPath.startsWith(drivePath)) {
+                return drive[0].toUpperCase(java.util.Locale.ENGLISH) + ":" + unixPath.substring(drivePath.length()).replace('/', '\\');
+            }
+        }
+        return unixPath;
+    }
+
+    public static String dosToUnixPath(String dosPath, Container container) {
+        if (dosPath == null) return "";
+        if (dosPath.length() >= 2 && dosPath.charAt(1) == ':') {
+            char driveLetter = Character.toUpperCase(dosPath.charAt(0));
+            String rest = dosPath.substring(2).replace('\\', '/');
+            if (driveLetter == 'C') {
+                return container.getRootDir().getAbsolutePath() + "/.wine/drive_c" + rest;
+            }
+            for (String[] drive : container.drivesIterator()) {
+                if (Character.toUpperCase(drive[0].charAt(0)) == driveLetter) {
+                    return drive[1] + rest;
+                }
+            }
+        }
+        return dosPath;
+    }
+
     public static void changeServicesStatus(Container container, boolean onlyEssential) {
         final String[] services = {"BITS:3", "Eventlog:2", "HTTP:3", "LanmanServer:3", "NDIS:2", "PlugPlay:2", "RpcSs:3", "scardsvr:3", "Schedule:3", "Spooler:3", "StiSvc:3", "TermService:3", "winebus:3", "winehid:3", "Winmgmt:3", "wuauserv:3"};
         File systemRegFile = new File(container.getRootDir(), ".wine/system.reg");

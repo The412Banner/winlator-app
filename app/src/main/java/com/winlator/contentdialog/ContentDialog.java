@@ -3,6 +3,7 @@ package com.winlator.contentdialog;
 import android.app.Dialog;
 import android.content.Context;
 import android.util.SparseBooleanArray;
+import android.view.InputDevice;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -22,8 +23,13 @@ import com.winlator.core.Callback;
 import java.util.ArrayList;
 
 public class ContentDialog extends Dialog {
+    public interface OnControllerInputListener {
+        void onControllerInput(InputDevice device);
+    }
+
     protected Runnable onConfirmCallback;
     protected Runnable onCancelCallback;
+    private OnControllerInputListener onControllerInputListener;
     private final View contentView;
 
     public ContentDialog(@NonNull Context context) {
@@ -203,5 +209,13 @@ public class ContentDialog extends Dialog {
         });
 
         dialog.show();
+    }
+
+    public void setOnControllerInputListener(OnControllerInputListener listener) {
+        this.onControllerInputListener = listener;
+    }
+
+    public OnControllerInputListener getOnControllerInputListener() {
+        return onControllerInputListener;
     }
 }

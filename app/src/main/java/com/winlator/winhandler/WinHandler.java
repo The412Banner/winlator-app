@@ -68,12 +68,12 @@ public class WinHandler {
     private final ArrayDeque<Runnable> actions = new ArrayDeque<>();
     private final List<Integer> gamepadClients = new CopyOnWriteArrayList<>();
 
-    private boolean initReceived = false;
+    boolean initReceived = false;
     private boolean running = false;
     private byte inputType = DEFAULT_INPUT_TYPE;
 
     // --- Context / managers --------------------------------------------------
-    private final XServerDisplayActivity activity;
+    final XServerDisplayActivity activity;
     private final ControllerManager controllerManager;
     private SharedPreferences preferences;
     private OnGetProcessInfoListener onGetProcessInfoListener;
@@ -987,7 +987,7 @@ public class WinHandler {
 
     // ========================== Exec / process mgmt =========================
 
-    private boolean sendPacket(int port) {
+    boolean sendPacket(int port) {
         try {
             int size = sendData.position();
             if (size == 0) return false;
@@ -1000,7 +1000,17 @@ public class WinHandler {
         }
     }
 
-    private void addAction(Runnable action) {
+    boolean sendPacket(int port, byte[] data) {
+        try {
+            DatagramPacket p = new DatagramPacket(data, data.length, localhost, port);
+            socket.send(p);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    void addAction(Runnable action) {
         synchronized (actions) {
             actions.add(action);
             actions.notify();
@@ -1362,7 +1372,7 @@ public class WinHandler {
     private MIDIHandler midiHandler;
 
     public MIDIHandler getMIDIhandler() {
-        if (midiHandler == null) midiHandler = new MIDIHandler(activity);
+        if (midiHandler == null) midiHandler = new MIDIHandler(this);
         return midiHandler;
     }
 

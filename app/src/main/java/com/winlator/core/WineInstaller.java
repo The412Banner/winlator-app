@@ -8,6 +8,7 @@ import com.winlator.MainActivity;
 import com.winlator.R;
 import com.winlator.box64.Box64Preset;
 import com.winlator.container.Container;
+import com.winlator.xenvironment.ImageFs;
 import com.winlator.xenvironment.RootFS;
 import com.winlator.xenvironment.XEnvironment;
 import com.winlator.xenvironment.components.GuestProgramLauncherComponent;
@@ -74,7 +75,7 @@ public abstract class WineInstaller {
 
             preloaderDialog.closeOnUiThread();
             AppUtils.RestartApplicationOptions options = new AppUtils.RestartApplicationOptions();
-            options.selectedMenuItemId = R.id.menu_item_settings;
+            options.selectedMenuItemId = R.id.main_menu_settings;
             AppUtils.restartApplication(activity, options);
         }));
     }
@@ -141,8 +142,8 @@ public abstract class WineInstaller {
             return;
         }
 
-        RootFS rootFS = RootFS.find(context);
-        File rootDir = rootFS.getRootDir();
+        ImageFs imageFs = ImageFs.find(context);
+        File rootDir = imageFs.getRootDir();
         String wineBinPath = wineBin64.isFile() ? wineBin64.getPath() : wineBin.getPath();
         final String winePath = wineDir.getPath();
 
@@ -163,7 +164,7 @@ public abstract class WineInstaller {
         linkFile.delete();
         FileUtils.symlink(wineDir, linkFile);
 
-        XEnvironment environment = new XEnvironment(context, rootFS);
+        XEnvironment environment = new XEnvironment(context, imageFs);
         GuestProgramLauncherComponent guestProgramLauncherComponent = new GuestProgramLauncherComponent();
         guestProgramLauncherComponent.setGuestExecutable(wineBinPath+" --version");
         guestProgramLauncherComponent.setTerminationCallback((status) -> {

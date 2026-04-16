@@ -4,7 +4,6 @@
     <item name="SGraphicsDriver" type="id"/>
     <item name="SDXWrapper" type="id"/>
     <item name="SDDrawrapper" type="id"/>
-    <item name="SBox64Version" type="id"/>
     <item name="BTGraphicsDriverConfig" type="id"/>
     <item name="BTDXWrapperConfig" type="id"/>
     <item name="SEmulator" type="id"/>
@@ -28,7 +27,6 @@
     <item name="SBSharpnessDenoise" type="id"/>
     <item name="TVSharpnessLevel" type="id"/>
     <item name="TVSharpnessDenoise" type="id"/>
-    <item name="SStartupSelection" type="id"/>
     <!-- XServerDisplayActivity input_controls_dialog missing IDs -->
     <item name="CBSimulateTouchScreen" type="id"/>
     <item name="CBEnableTimeout" type="id"/>
@@ -40,9 +38,105 @@
     <item name="CBEnableNTSCEffect" type="id"/>
     <!-- XrActivity layout ID -->
     <item name="XRTextInput" type="id"/>
-    <!-- FrameRating IDs -->
+    <!-- FrameRating IDs (not in layout XML) -->
     <item name="TVFPS" type="id"/>
     <item name="TVRenderer" type="id"/>
     <item name="TVGPU" type="id"/>
     <item name="TVRAM" type="id"/>
+    <!-- ContainerDetailFragment IDs not in existing layouts -->
+    <item name="SDesktopTheme" type="id"/>
+    <item name="SCSMT" type="id"/>
+    <item name="SStrictShaderMath" type="id"/>
+    <item name="SPrimaryController" type="id"/>
+    <item name="SButtonA" type="id"/>
+    <item name="SButtonB" type="id"/>
+    <item name="SButtonX" type="id"/>
+    <item name="SButtonY" type="id"/>
+    <item name="SButtonGrip" type="id"/>
+    <item name="SButtonTrigger" type="id"/>
+    <item name="SThumbstickUp" type="id"/>
+    <item name="SThumbstickDown" type="id"/>
+    <item name="SThumbstickLeft" type="id"/>
+    <item name="SThumbstickRight" type="id"/>
+    <item name="SDInputType" type="id"/>
+    <item name="TVDesktop" type="id"/>
+    <item name="TVRegistryKeys" type="id"/>
+    <item name="TVDirectX" type="id"/>
+    <item name="TVGeneral" type="id"/>
+    <item name="TVBox86Box64" type="id"/>
+    <item name="TVFEXCore" type="id"/>
+    <item name="TVSystem" type="id"/>
+    <item name="TVGameController" type="id"/>
+    <item name="TVGameControllerLabel" type="id"/>
+    <item name="TVLegacyInputMessage" type="id"/>
+    <item name="CBShowFPS" type="id"/>
+    <item name="CBEnableXInput" type="id"/>
+    <item name="CBEnableDInput" type="id"/>
+    <item name="CBSdl2Toggle" type="id"/>
+    <item name="CBWoW64Mode" type="id"/>
+    <item name="ETlcall" type="id"/>
+    <item name="BTShowLCALL" type="id"/>
+    <item name="BTDInputHelp" type="id"/>
+    <item name="BTXInputHelp" type="id"/>
+    <item name="LLTabXR" type="id"/>
+    <item name="LLDinputMapperType" type="id"/>
+    <!-- SettingsFragment IDs not in existing layouts -->
+    <item name="CBDarkMode" type="id"/>
+    <item name="CBEnableBigPictureMode" type="id"/>
+    <item name="CBXinputToggle" type="id"/>
+    <item name="CBXTouchscreenToggle" type="id"/>
+    <item name="CBUseDRI3" type="id"/>
+    <item name="CBUseXR" type="id"/>
+    <item name="CBEnableBox86_64Logs" type="id"/>
+    <item name="CBEnableFileProvider" type="id"/>
+    <item name="CBOpenWithAndroidBrowser" type="id"/>
+    <item name="CBShareAndroidClipboard" type="id"/>
+    <item name="CBEnablePebLogs" type="id"/>
+    <item name="CBEnableCustomApiKey" type="id"/>
+    <item name="CBCursorLock" type="id"/>
+    <item name="BTConfigureAnalogSticks" type="id"/>
+    <item name="BTConfigureGyro" type="id"/>
+    <item name="BTChooseFrontendExportPath" type="id"/>
+    <item name="BTInstallSF" type="id"/>
+    <item name="BTRemoveSF" type="id"/>
+    <item name="BTHelpFileProvider" type="id"/>
+    <item name="BTHelpTriggerMode" type="id"/>
+    <item name="BTHelpApiKey" type="id"/>
+    <item name="BTReInstallImagefs" type="id"/>
+    <item name="BTBackupData" type="id"/>
+    <item name="BTRestoreData" type="id"/>
+    <item name="TVFrontendExportPath" type="id"/>
+    <item name="TVCursorSpeed" type="id"/>
+    <item name="TVCustomApiKey" type="id"/>
+    <item name="TVXServer" type="id"/>
+    <item name="TVSound" type="id"/>
+    <item name="TVTheme" type="id"/>
+    <item name="TVShortcutSettings" type="id"/>
+    <item name="TVBigPictureMode" type="id"/>
+    <item name="TVLogs" type="id"/>
+    <item name="TVImageFs" type="id"/>
+    <item name="TVGlibcExpVersionFork" type="id"/>
+    <item name="TVExperimental" type="id"/>
+    <item name="TVGyroSettings" type="id"/>
+    <item name="ETCustomApiKey" type="id"/>
+    <item name="CBGyroEnabled" type="id"/>
+    <item name="CBProcessGyroWithLeftTrigger" type="id"/>
+    <item name="RGTriggerType" type="id"/>
+    <item name="RBTriggerIsAxis" type="id"/>
+    <item name="RBTriggerIsButton" type="id"/>
+    <item name="RBTriggerIsMixed" type="id"/>
+    <item name="RGyroMode" type="id"/>
+    <item name="RBHoldMode" type="id"/>
+    <item name="RBToggleMode" type="id"/>
+    <item name="SBGyroTriggerButton" type="id"/>
+    <!-- DXVKConfigDialog IDs -->
+    <item name="SWAsync" type="id"/>
+    <item name="SWAsyncCache" type="id"/>
+    <item name="LLAsync" type="id"/>
+    <item name="LLAsyncCache" type="id"/>
+    <!-- MacrosDialog / dialog bar IDs not in existing layouts -->
+    <item name="BTEnableAll" type="id"/>
+    <item name="BTDisableAll" type="id"/>
+    <!-- Navigation IDs -->
+    <item name="home" type="id"/>
 </resources>

@@ -64,6 +64,14 @@ public abstract class AppUtils {
         activity.overridePendingTransition(0, 0);
     }
 
+    public static class RestartApplicationOptions {
+        public int selectedMenuItemId = 0;
+    }
+
+    public static void restartApplication(Context context, RestartApplicationOptions options) {
+        restartApplication(context, options != null ? options.selectedMenuItemId : 0);
+    }
+
     public static void restartApplication(Context context) {
         restartApplication(context, 0);
     }
