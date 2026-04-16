@@ -432,18 +432,17 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     private boolean requestAppPermissions() {
         boolean hasWritePermission = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
         boolean hasReadPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
-        boolean hasManageStoragePermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager();
 
-        if (hasWritePermission && hasReadPermission && hasManageStoragePermission) {
-            return false; // All permissions are granted
+        if (hasWritePermission && hasReadPermission) {
+            // Storage permissions satisfied — MANAGE_EXTERNAL_STORAGE is handled
+            // separately via showAllFilesAccessDialog() after ImageFS installs
+            return false;
         }
 
-        if (!hasWritePermission || !hasReadPermission) {
-            String[] permissions = new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE};
-            ActivityCompat.requestPermissions(this, permissions, PERMISSION_WRITE_EXTERNAL_STORAGE_REQUEST_CODE);
-        }
-
-        return true; // Permissions are still being requested
+        ActivityCompat.requestPermissions(this,
+                new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE},
+                PERMISSION_WRITE_EXTERNAL_STORAGE_REQUEST_CODE);
+        return true;
     }
 
     @Override
