@@ -454,13 +454,8 @@ public class SettingsFragment extends Fragment {
     }
 
     private void updateTheme(boolean isDarkMode) {
-        if (isDarkMode) {
-            getActivity().setTheme(R.style.AppTheme_Dark);
-        } else {
-            getActivity().setTheme(R.style.AppTheme);
-        }
-
-        // Recreate the activity to apply the new theme
+        // setTheme() must not be called on a live activity - just recreate so
+        // MainActivity.onCreate() picks up the updated preference before super.onCreate()
         getActivity().recreate();
     }
 

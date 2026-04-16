@@ -95,11 +95,14 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Theme must be set before super.onCreate() to avoid stacking themes
+        isDarkMode = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("dark_mode", false);
+        if (isDarkMode) setTheme(R.style.AppTheme_Dark);
+
         super.onCreate(savedInstanceState);
 
         // Initialize the controller management system
         ControllerManager.getInstance().init(getApplicationContext());
-
 
         // Get shared preferences
         SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
@@ -108,22 +111,9 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         boolean isBigPictureModeEnabled = sharedPreferences.getBoolean("enable_big_picture_mode", false);
 
         if (isBigPictureModeEnabled) {
-            // If enabled, launch the BigPictureActivity and finish MainActivity
             Intent intent = new Intent(MainActivity.this, BigPictureActivity.class);
             startActivity(intent);
         }
-
-        // Load the user's preferred theme
-        sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
-        isDarkMode = sharedPreferences.getBoolean("dark_mode", false);
-
-        // Apply the theme based on the preference
-        if (isDarkMode) {
-            setTheme(R.style.AppTheme_Dark);
-        } else {
-            setTheme(R.style.AppTheme);
-        }
-
 
         setContentView(R.layout.main_activity);
 
