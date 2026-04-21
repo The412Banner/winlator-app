@@ -56,6 +56,7 @@ import com.winlator.core.FileUtils;
 import com.winlator.core.PreloaderDialog;
 import com.winlator.inputcontrols.ControllerManager;
 import com.winlator.xenvironment.ImageFs;
+import com.winlator.xenvironment.RootFS;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -178,7 +179,7 @@ public class ContainersFragment extends Fragment {
     public boolean onOptionsItemSelected(MenuItem menuItem) {
         switch (menuItem.getItemId()) {
             case R.id.containers_menu_add:
-                if (!ImageFs.find(getContext()).isValid()) return false;
+                if (!RootFS.find(getContext()).isValid()) return false;
                 FragmentManager fragmentManager = getParentFragmentManager();
                 fragmentManager.beginTransaction()
                         .setCustomAnimations(R.anim.slide_in_up, R.anim.slide_out_down, R.anim.slide_in_down, R.anim.slide_out_up)

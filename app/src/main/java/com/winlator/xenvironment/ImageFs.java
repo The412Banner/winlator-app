@@ -34,7 +34,10 @@ public class ImageFs {
     }
 
     public static ImageFs find(Context context) {
-        return new ImageFs(new File(context.getFilesDir(), "imagefs"));
+        File legacyDir = new File(context.getFilesDir(), "imagefs");
+        File rootDir = new File(context.getFilesDir(), "rootfs");
+        if (legacyDir.isDirectory() && !rootDir.exists()) legacyDir.renameTo(rootDir);
+        return new ImageFs(rootDir);
     }
 
     public static ImageFs find(File rootDir) {
