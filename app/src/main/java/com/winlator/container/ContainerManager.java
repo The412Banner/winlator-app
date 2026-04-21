@@ -262,7 +262,11 @@ public class ContainerManager {
         String containerPattern = wineVersion + "_container_pattern.tzst";
         boolean result = TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context, containerPattern, containerDir, onExtractFileListener);
 
-        if (!result) {
+        if (!result && WineInfo.isMainWineVersion(wineVersion)) {
+            result = TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context, "container_pattern.tzst", containerDir, onExtractFileListener);
+        }
+
+        if (!result && wineInfo.path != null) {
             File containerPatternFile = new File(wineInfo.path + "/prefixPack.txz");
             result = TarCompressorUtils.extract(TarCompressorUtils.Type.XZ, containerPatternFile, containerDir);
         }
