@@ -1,15 +1,26 @@
-name: Build APK
+name: Build & Release APK
 
 on:
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build'
+        required: true
+        default: 'main'
+        type: string
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
+        fetch-depth: 0
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -22,19 +33,22 @@ jobs:
       run: |
         echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1"
 
+    - name: Install NDK 24.0.8215888
+      run: |
+        echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;24.0.8215888"
+
     - name: Fix duplicate .so conflict
       run: |
-        python3 - <<'EOF'
+        python3 - <<'PYEOF'
         import re
         with open("app/build.gradle", "r") as f:
             content = f.read()
         insert = '\n    packagingOptions {\n        pickFirst "**/*.so"\n    }\n'
-        # Insert before the closing brace of the android { } block
         content = re.sub(r'(^})', insert + r'\1', content, count=1, flags=re.MULTILINE)
         with open("app/build.gradle", "w") as f:
             f.write(content)
         print("packagingOptions inserted")
-        EOF
+        PYEOF
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
@@ -42,8 +56,35 @@ jobs:
     - name: Build with Gradle
       run: ./gradlew assembleDebug
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
+    - name: Get version info
+      id: version
+      run: |
+        VERSION_NAME=$(grep versionName app/build.gradle | awk -F'"' '{print $2}')
+        VERSION_CODE=$(grep versionCode app/build.gradle | awk '{print $2}')
+        BRANCH=${{ github.event.inputs.branch }}
+        SHORT_SHA=$(git rev-parse --short HEAD)
+        SAFE_BRANCH=$(echo "$BRANCH" | tr '/' '-')
+        echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+        echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+        echo "tag=v${VERSION_NAME}-${SAFE_BRANCH}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+        echo "release_name=Winlator ${VERSION_NAME} (${SAFE_BRANCH})" >> $GITHUB_OUTPUT
+
+    - name: Rename APK
+      run: |
+        mv app/build/outputs/apk/debug/app-debug.apk \
+           app/build/outputs/apk/debug/winlator-${{ steps.version.outputs.tag }}.apk
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
       with:
-        name: apk-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+        tag_name: ${{ steps.version.outputs.tag }}
+        name: ${{ steps.version.outputs.release_name }}
+        body: |
+          **Branch:** `${{ github.event.inputs.branch }}`
+          **Commit:** `${{ github.sha }}`
+          **Version:** ${{ steps.version.outputs.version_name }} (code ${{ steps.version.outputs.version_code }})
+
+          > Debug build — for testing only.
+        files: app/build/outputs/apk/debug/winlator-${{ steps.version.outputs.tag }}.apk
+        draft: false
+        prerelease: true
