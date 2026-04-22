@@ -83,7 +83,8 @@ public class SettingsFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        ((AppCompatActivity)getActivity()).getSupportActionBar().setTitle(R.string.settings);
+        AppCompatActivity compat = (AppCompatActivity)getActivity();
+        if (compat != null && compat.getSupportActionBar() != null) compat.getSupportActionBar().setTitle(R.string.settings);
     }
 
     @Override
