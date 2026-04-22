@@ -2,6 +2,7 @@ package com.winlator.ui.screens
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
@@ -74,8 +75,8 @@ fun AppNavGraph(startScreen: String? = null) {
                         onMenuClick = { scope.launch { drawerState.open() } },
                     )
                 },
-            ) { _ ->
-                Box(modifier = Modifier.fillMaxSize()) {
+            ) { paddingValues ->
+                Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
                     NavHost(
                         navController    = navController,
                         startDestination = Screen.Shortcuts.route,

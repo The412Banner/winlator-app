@@ -2,7 +2,7 @@ package com.winlator.ui.components
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.Image
+import android.widget.ImageView
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,13 +34,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
 import com.winlator.BuildConfig
 import com.winlator.R
@@ -113,14 +113,13 @@ private fun AboutDialog(
         confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
         text = {
             Column {
-                // Header row: name + version on left, icon on right
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text  = stringResource(R.string.app_name),
-                            style = MaterialTheme.typography.titleLarge,
+                            text       = stringResource(R.string.app_name),
+                            style      = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
+                            color      = MaterialTheme.colorScheme.primary,
                         )
                         val websiteText = buildAnnotatedString {
                             pushStringAnnotation("URL", "https://www.winlator.org")
@@ -142,9 +141,13 @@ private fun AboutDialog(
                         )
                     }
                     Spacer(Modifier.width(12.dp))
-                    Image(
-                        painter = painterResource(R.mipmap.ic_launcher),
-                        contentDescription = null,
+                    // Use AndroidView so the adaptive icon renders correctly
+                    AndroidView(
+                        factory = { ctx ->
+                            ImageView(ctx).apply {
+                                setImageResource(R.mipmap.ic_launcher)
+                            }
+                        },
                         modifier = Modifier.size(70.dp),
                     )
                 }
@@ -152,8 +155,8 @@ private fun AboutDialog(
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                 Text(
-                    text  = stringResource(R.string.credits_and_third_party_apps),
-                    style = MaterialTheme.typography.bodyMedium,
+                    text       = stringResource(R.string.credits_and_third_party_apps),
+                    style      = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.height(4.dp))
