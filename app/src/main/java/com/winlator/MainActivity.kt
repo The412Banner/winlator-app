@@ -2,7 +2,9 @@ package com.winlator
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
@@ -11,7 +13,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.winlator.core.Callback
 import com.winlator.core.LocaleHelper
+import com.winlator.ui.components.PreloaderState
 import com.winlator.ui.screens.AppNavGraph
 import com.winlator.ui.theme.AppThemeState
 import com.winlator.ui.theme.WinlatorTheme
@@ -26,6 +30,18 @@ class MainActivity : AppCompatActivity() {
         const val OPEN_FILE_REQUEST_CODE: Int = 2
         const val EDIT_INPUT_CONTROLS_REQUEST_CODE: Int = 3
         const val OPEN_DIRECTORY_REQUEST_CODE: Int = 4
+    }
+
+    // Compat shim: InputControlsFragment still calls preloaderDialog.show(resId) / .close()
+    @JvmField val preloaderDialog = object {
+        fun show(resId: Int) = PreloaderState.show(this@MainActivity.getString(resId))
+        fun close() = PreloaderState.hide()
+    }
+
+    private var openFileCallback: Callback<Uri>? = null
+
+    fun setOpenFileCallback(callback: Callback<Uri>) {
+        openFileCallback = callback
     }
 
     override fun attachBaseContext(newBase: Context) {
@@ -52,6 +68,15 @@ class MainActivity : AppCompatActivity() {
                     AppNavGraph(startScreen = startScreen)
                 }
             }
+        }
+    }
+
+    @Suppress("OVERRIDE_DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == OPEN_FILE_REQUEST_CODE && resultCode == RESULT_OK) {
+            data?.data?.let { openFileCallback?.call(it) }
+            openFileCallback = null
         }
     }
 
