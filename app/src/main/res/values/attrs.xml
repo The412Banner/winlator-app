@@ -5,6 +5,7 @@
     <attr name="maxValue" format="integer|float" />
     <attr name="step" format="integer|float" />
     <attr name="textSize" format="dimension" />
+    <attr name="tabTextColor" format="color|reference" />
     <attr name="colorPrimaryText" format="color" />
     <attr name="colorSecondaryText" format="color" />
     <attr name="colorPrimarySurface" format="color" />
