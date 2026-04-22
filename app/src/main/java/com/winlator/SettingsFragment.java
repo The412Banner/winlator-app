@@ -229,12 +229,7 @@ public class SettingsFragment extends Fragment {
 
             if (editor.commit()) {
                 if (!restartApp) {
-                    NavigationView navigationView = getActivity().findViewById(R.id.NavigationView);
-                    navigationView.setCheckedItem(R.id.menu_item_containers);
-                    FragmentManager fragmentManager = getParentFragmentManager();
-                    fragmentManager.beginTransaction()
-                        .replace(R.id.FLFragmentContainer, new ContainersFragment())
-                        .commit();
+                    // Navigation to ContainersFragment not available in Compose activity
                 }
                 else AppUtils.restartActivity(getActivity());
             }
