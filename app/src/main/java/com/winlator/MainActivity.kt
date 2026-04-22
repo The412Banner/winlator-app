@@ -13,6 +13,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.Fragment
 import com.winlator.core.Callback
 import com.winlator.core.LocaleHelper
 import com.winlator.ui.components.PreloaderState
@@ -32,17 +33,22 @@ class MainActivity : AppCompatActivity() {
         const val OPEN_DIRECTORY_REQUEST_CODE: Int = 4
     }
 
-    // Compat shim: InputControlsFragment still calls preloaderDialog.show(resId) / .close()
-    @JvmField val preloaderDialog = object {
-        fun show(resId: Int) = PreloaderState.show(this@MainActivity.getString(resId))
+    // Named inner class so Java can call show(int) / close()
+    inner class PreloaderDialogCompat {
+        fun show(resId: Int) = PreloaderState.show(getString(resId))
         fun close() = PreloaderState.hide()
     }
+
+    @JvmField val preloaderDialog = PreloaderDialogCompat()
 
     private var openFileCallback: Callback<Uri>? = null
 
     fun setOpenFileCallback(callback: Callback<Uri>) {
         openFileCallback = callback
     }
+
+    // Compat no-op: remaining Java fragments still reference this method
+    fun showFragment(fragment: Fragment) {}
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LocaleHelper.setSystemLocale(newBase))
