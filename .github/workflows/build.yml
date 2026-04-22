@@ -32,11 +32,7 @@ jobs:
         import re
         with open("app/build.gradle", "r") as f:
             content = f.read()
-        insert = '
-    packagingOptions {
-        pickFirst "**/*.so"
-    }
-'
+        insert = '\n    packagingOptions {\n        pickFirst "**/*.so"\n    }\n'
         # Insert before the closing brace of the android { } block
         content = re.sub(r'(^})', insert + r'\1', content, count=1, flags=re.MULTILINE)
         with open("app/build.gradle", "w") as f:
