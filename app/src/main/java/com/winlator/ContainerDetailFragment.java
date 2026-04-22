@@ -107,7 +107,8 @@ public class ContainerDetailFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        ((AppCompatActivity)getActivity()).getSupportActionBar().setTitle(isEditMode() ? R.string.edit_container : R.string.new_container);
+        AppCompatActivity compat = (AppCompatActivity)getActivity();
+        if (compat != null && compat.getSupportActionBar() != null) compat.getSupportActionBar().setTitle(isEditMode() ? R.string.edit_container : R.string.new_container);
     }
 
     public boolean isEditMode() {
