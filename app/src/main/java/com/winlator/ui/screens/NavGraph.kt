@@ -115,7 +115,7 @@ fun AppNavGraph(startScreen: String? = null) {
                             arguments = listOf(navArgument("containerId") { type = NavType.IntType }),
                         ) { backStack ->
                             val id = backStack.arguments?.getInt("containerId") ?: return@composable
-                            ContainerDetailScreen(containerId = id, navController = navController)
+                            ContainerDetailScreen(containerId = id)
                         }
                         composable(
                             route     = Screen.ContainerFileManager.route,
