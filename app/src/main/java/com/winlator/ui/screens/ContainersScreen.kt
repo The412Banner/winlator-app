@@ -92,7 +92,7 @@ fun ContainersScreen(
 
         FloatingActionButton(
             onClick = {
-                if (vm.isRootFSValid()) navController.navigate(Screen.ContainerDetail.route)
+                if (vm.isRootFSValid()) navController.navigate(Screen.ContainerDetail.route(0))
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
