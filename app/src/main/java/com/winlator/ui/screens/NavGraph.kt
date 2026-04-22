@@ -42,7 +42,6 @@ fun AppNavGraph(startScreen: String? = null) {
 
     LaunchedEffect(currentRoute) { topBarActionsState.value = {} }
 
-    // Navigate to override start screen once after composition
     LaunchedEffect(startScreen) {
         if (startScreen != null) navController.navigate(startScreen)
     }
@@ -50,12 +49,8 @@ fun AppNavGraph(startScreen: String? = null) {
     val title = when {
         currentRoute == Screen.Containers.route    -> "Containers"
         currentRoute == Screen.Shortcuts.route     -> "Shortcuts"
-        currentRoute == Screen.Contents.route      -> "Contents"
-        currentRoute == Screen.Saves.route         -> "Saves"
-        currentRoute == Screen.AdrenoTools.route   -> "AdrenoTools"
         currentRoute == Screen.InputControls.route -> "Input Controls"
         currentRoute == Screen.Settings.route      -> "Settings"
-        currentRoute == Screen.Appearance.route    -> "Appearance"
         currentRoute?.startsWith("container_detail") == true       -> "Container"
         currentRoute?.startsWith("container_file_manager") == true -> "File Manager"
         else -> "Winlator"
@@ -83,32 +78,20 @@ fun AppNavGraph(startScreen: String? = null) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     NavHost(
                         navController    = navController,
-                        startDestination = Screen.Containers.route,
+                        startDestination = Screen.Shortcuts.route,
                         modifier         = Modifier.fillMaxSize(),
                     ) {
-                        composable(Screen.Containers.route) {
-                            ContainersScreen(navController)
-                        }
                         composable(Screen.Shortcuts.route) {
                             ShortcutsScreen(navController)
                         }
-                        composable(Screen.Contents.route) {
-                            ContentsScreen()
-                        }
-                        composable(Screen.Saves.route) {
-                            SavesScreen()
-                        }
-                        composable(Screen.AdrenoTools.route) {
-                            AdrenoToolsScreen()
+                        composable(Screen.Containers.route) {
+                            ContainersScreen(navController)
                         }
                         composable(Screen.InputControls.route) {
                             FragmentScreen(InputControlsFragment::class.java)
                         }
                         composable(Screen.Settings.route) {
                             FragmentScreen(SettingsFragment::class.java)
-                        }
-                        composable(Screen.Appearance.route) {
-                            AppearanceScreen()
                         }
                         composable(
                             route     = Screen.ContainerDetail.route,

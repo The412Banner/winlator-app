@@ -1,14 +1,10 @@
 package com.winlator.ui.screens
 
 sealed class Screen(val route: String) {
-    object Containers    : Screen("containers")
     object Shortcuts     : Screen("shortcuts")
-    object Contents      : Screen("contents")
-    object Saves         : Screen("saves")
-    object AdrenoTools   : Screen("adrenotools")
+    object Containers    : Screen("containers")
     object InputControls : Screen("input_controls")
     object Settings      : Screen("settings")
-    object Appearance    : Screen("appearance")
     object ContainerDetail : Screen("container_detail/{containerId}") {
         fun route(id: Int) = "container_detail/$id"
     }
