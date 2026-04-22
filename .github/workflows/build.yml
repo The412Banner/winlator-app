@@ -22,13 +22,21 @@ jobs:
       run: |
         echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1"
 
+    - name: Install NDK 24.0.8215888
+      run: |
+        echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;24.0.8215888"
+
     - name: Fix duplicate .so conflict
       run: |
         python3 - <<'EOF'
         import re
         with open("app/build.gradle", "r") as f:
             content = f.read()
-        insert = '\n    packagingOptions {\n        pickFirst "**/*.so"\n    }\n'
+        insert = '
+    packagingOptions {
+        pickFirst "**/*.so"
+    }
+'
         # Insert before the closing brace of the android { } block
         content = re.sub(r'(^})', insert + r'\1', content, count=1, flags=re.MULTILINE)
         with open("app/build.gradle", "w") as f:
